@@ -1,0 +1,3384 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#fffc00">
+  <link rel="manifest" href="manifest.json">
+  <title>SnapBooth • AI 3D Lenses & Merged Duo Booth</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&family=Playfair+Display:ital,wght@1,600&family=Space+Mono:wght@700&display=swap"
+    rel="stylesheet">
+  <!-- PeerJS with Google STUN + Open Relay TURN for mobile hotspot & firewall bypass -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <!-- TensorFlow.js & BlazeFace for real-time face shape & landmark analysis -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/blazeface@0.0.7/dist/blazeface.min.js"></script>
+  <style>
+    :root {
+      --bg: #0c0e14;
+      --card-bg: #141722;
+      --accent: #fffc00;
+      --snap-pink: #ff3b69;
+      --text: #f0f2f5;
+      --muted: #8c93a4;
+      --border: #262b3d;
+      --radius: 18px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      background: radial-gradient(circle at 50% 0%, #1e2336, var(--bg) 80%);
+      color: var(--text);
+      font-family: 'Outfit', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 12px 16px;
+      overflow-x: hidden;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 10px;
+    }
+
+    header h1 {
+      font-size: 2rem;
+      font-weight: 800;
+      letter-spacing: -1px;
+      background: linear-gradient(135deg, #fffc00 0%, #ff758c 50%, #ff3b69 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    header p {
+      color: var(--muted);
+      font-size: 0.85rem;
+      margin-top: 2px;
+    }
+
+    /* Duo Remote Friend Connection Bar */
+    .duo-bar {
+      width: 100%;
+      max-width: 1180px;
+      background: #141722;
+      border: 1px solid #282f44;
+      border-radius: 14px;
+      padding: 8px 14px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    }
+
+    .duo-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.84rem;
+      font-weight: 600;
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #10b981;
+      box-shadow: 0 0 8px #10b981;
+      flex-shrink: 0;
+    }
+
+    .status-dot.connecting {
+      background: #f59e0b;
+      box-shadow: 0 0 8px #f59e0b;
+    }
+
+    .status-dot.duo {
+      background: #ff3b69;
+      box-shadow: 0 0 10px #ff3b69;
+      animation: pulseDot 1.5s infinite;
+    }
+
+    @keyframes pulseDot {
+      0% {
+        transform: scale(0.9);
+        opacity: 0.8;
+      }
+
+      50% {
+        transform: scale(1.2);
+        opacity: 1;
+      }
+
+      100% {
+        transform: scale(0.9);
+        opacity: 0.8;
+      }
+    }
+
+    .duo-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .room-badge {
+      background: #1d2232;
+      padding: 4px 10px;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      color: #b0b8cb;
+      font-family: 'Space Mono', monospace;
+      border: 1px solid var(--border);
+    }
+
+    .room-badge strong {
+      color: #fff;
+    }
+
+    .btn-sm {
+      background: #232a3d;
+      border: 1px solid var(--border);
+      color: #fff;
+      padding: 5px 11px;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.2s;
+    }
+
+    .btn-sm:hover {
+      background: #2f3852;
+    }
+
+    .btn-sm.btn-accent {
+      background: var(--snap-pink);
+      border-color: var(--snap-pink);
+    }
+
+    .join-group {
+      display: flex;
+      gap: 5px;
+    }
+
+    .join-input {
+      background: #0d0f16;
+      border: 1px solid var(--border);
+      color: #fff;
+      padding: 5px 9px;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      width: 110px;
+      font-family: inherit;
+    }
+
+    .join-input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    /* Main Layout */
+    .main-layout {
+      display: grid;
+      grid-template-columns: 1fr 330px;
+      gap: 18px;
+      width: 100%;
+      max-width: 1180px;
+    }
+
+    /* Booth Card */
+    .booth-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+    }
+
+    /* Viewport Area */
+    .viewport-container {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 4/3;
+      max-height: 520px;
+      background: #000;
+      border-radius: 14px;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 2px solid #293046;
+      touch-action: none;
+    }
+
+    .video-stage {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+    }
+
+    .video-slot {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      transition: width 0.3s ease;
+      background: #000;
+    }
+
+    .video-slot.duo-slot {
+      width: 50% !important;
+    }
+
+    .video-slot video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1);
+      transition: filter 0.2s ease;
+    }
+
+    .video-slot video.no-mirror {
+      transform: scaleX(1);
+    }
+
+    .slot-badge {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      background: rgba(15, 17, 23, 0.85);
+      backdrop-filter: blur(4px);
+      color: #fff;
+      padding: 3px 8px;
+      border-radius: 10px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      pointer-events: none;
+      z-index: 25;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .duo-divider {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 50%;
+      width: 4px;
+      background: linear-gradient(180deg, #fffc00, #ff3b69);
+      box-shadow: 0 0 12px rgba(255, 59, 105, 0.8);
+      z-index: 25;
+      display: none;
+      transform: translateX(-50%);
+    }
+
+    .duo-mode-active .duo-divider {
+      display: block;
+    }
+
+    /* AI BIOMETRIC SCANNER OVERLAY */
+    .scanner-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      z-index: 35;
+      background: rgba(12, 14, 20, 0.35);
+      transition: opacity 0.4s ease;
+    }
+
+    .scanner-reticle {
+      position: relative;
+      width: 220px;
+      height: 290px;
+      border: 2px dashed rgba(255, 252, 0, 0.75);
+      border-radius: 50% 50% 45% 45%;
+      box-shadow: 0 0 25px rgba(255, 252, 0, 0.4);
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .scanner-laser {
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, transparent, #fffc00, transparent);
+      box-shadow: 0 0 14px #fffc00;
+      animation: laserScan 2s ease-in-out infinite alternate;
+    }
+
+    @keyframes laserScan {
+      0% {
+        top: 8%;
+      }
+
+      100% {
+        top: 92%;
+      }
+    }
+
+    .scanner-status {
+      margin-top: 14px;
+      background: rgba(15, 18, 26, 0.95);
+      padding: 6px 16px;
+      border-radius: 20px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: #fffc00;
+      border: 1px solid rgba(255, 252, 0, 0.5);
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Face Analysis Summary Card */
+    .face-analysis-card {
+      width: 100%;
+      background: #191f2e;
+      border: 1px solid #2d3852;
+      border-radius: 12px;
+      padding: 10px 14px;
+      margin-top: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .face-metrics-info {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.78rem;
+      flex-wrap: wrap;
+    }
+
+    .metric-pill {
+      background: #0f131d;
+      padding: 3px 8px;
+      border-radius: 6px;
+      border: 1px solid #28334a;
+      color: #b8c4d8;
+    }
+
+    .metric-pill strong {
+      color: #fffc00;
+    }
+
+    .btn-rescan {
+      background: #273048;
+      border: 1px solid #3d4a6e;
+      color: #fff;
+      padding: 4px 10px;
+      border-radius: 8px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .btn-rescan:hover {
+      background: #344163;
+      border-color: #fffc00;
+    }
+
+    /* Snapchat Lens Overlay Layer */
+    #lensOverlay,
+    #remoteLensOverlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 30;
+      overflow: hidden;
+      perspective: 850px;
+    }
+
+    .lens-anchor-prop {
+      position: absolute;
+      pointer-events: none;
+      transform: translate(-50%, -50%);
+      transform-origin: center center;
+      transform-style: preserve-3d;
+      filter: drop-shadow(0 10px 22px rgba(0, 0, 0, 0.6));
+      will-change: transform, left, top, width, height;
+      transition: opacity 0.15s ease;
+    }
+
+    .prop-inner-anim {
+      width: 100%;
+      height: 100%;
+      display: block;
+      transform-style: preserve-3d;
+    }
+
+    .lens-anchor-prop svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* Keyframe Animations */
+    .anim-cat-twitch {
+      animation: catTwitch 3.8s ease-in-out infinite;
+      transform-origin: center bottom;
+    }
+
+    @keyframes catTwitch {
+
+      0%,
+      82%,
+      100% {
+        transform: rotate(0deg);
+      }
+
+      84% {
+        transform: rotate(-6deg);
+      }
+
+      86% {
+        transform: rotate(5deg);
+      }
+
+      88% {
+        transform: rotate(-3deg);
+      }
+
+      90% {
+        transform: rotate(0deg);
+      }
+    }
+
+    .anim-halo-float {
+      animation: haloHover 2.5s ease-in-out infinite;
+    }
+
+    @keyframes haloHover {
+
+      0%,
+      100% {
+        transform: translateY(0);
+        filter: drop-shadow(0 0 16px #ffd700);
+      }
+
+      50% {
+        transform: translateY(-8px);
+        filter: drop-shadow(0 0 28px #fff59d);
+      }
+    }
+
+    .anim-bunny-bounce {
+      animation: bunnyBounce 2.8s ease-in-out infinite;
+      transform-origin: center bottom;
+    }
+
+    @keyframes bunnyBounce {
+
+      0%,
+      100% {
+        transform: translateY(0);
+      }
+
+      50% {
+        transform: translateY(-7px);
+      }
+    }
+
+    .anim-sparkle {
+      animation: sparkleAnim 2s ease-in-out infinite alternate;
+    }
+
+    @keyframes sparkleAnim {
+      0% {
+        transform: scale(0.95);
+        opacity: 0.85;
+      }
+
+      100% {
+        transform: scale(1.08);
+        opacity: 1;
+        filter: drop-shadow(0 0 14px #ffd700);
+      }
+    }
+
+    .anim-flutter {
+      animation: butterflyFlutter 1.6s ease-in-out infinite alternate;
+      transform-origin: center bottom;
+    }
+
+    @keyframes butterflyFlutter {
+      0% {
+        transform: translateY(0) rotate(-3deg) scale(0.96);
+      }
+
+      50% {
+        transform: translateY(-6px) rotate(4deg) scale(1.04);
+      }
+
+      100% {
+        transform: translateY(-2px) rotate(-2deg) scale(0.98);
+      }
+    }
+
+    .anim-flame {
+      animation: flamePulse 1.2s ease-in-out infinite alternate;
+      transform-origin: center bottom;
+    }
+
+    @keyframes flamePulse {
+      0% {
+        transform: scale(0.97);
+        filter: drop-shadow(0 0 12px #ff3d00);
+      }
+
+      100% {
+        transform: scale(1.06);
+        filter: drop-shadow(0 0 24px #ff9100);
+      }
+    }
+
+    .anim-cyber-pulse {
+      animation: cyberScan 2s ease-in-out infinite;
+    }
+
+    @keyframes cyberScan {
+
+      0%,
+      100% {
+        filter: drop-shadow(0 0 8px #00e5ff);
+      }
+
+      50% {
+        filter: drop-shadow(0 0 20px #00e5ff) brightness(1.2);
+      }
+    }
+
+    /* Flash Effect */
+    .flash-overlay {
+      position: absolute;
+      inset: 0;
+      background: white;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.08s ease-out;
+      z-index: 50;
+    }
+
+    .flash-active {
+      opacity: 0.95 !important;
+      transition: none;
+    }
+
+    /* Countdown Overlay */
+    .countdown-overlay {
+      position: absolute;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      font-size: 8rem;
+      font-weight: 800;
+      font-family: 'Space Mono', monospace;
+      color: #fff;
+      text-shadow: 0 0 40px rgba(255, 59, 105, 0.9), 0 4px 10px rgba(0, 0, 0, 0.8);
+      z-index: 45;
+      pointer-events: none;
+      animation: pulsePop 0.8s ease infinite;
+    }
+
+    @keyframes pulsePop {
+      0% {
+        transform: scale(0.6);
+        opacity: 0.2;
+      }
+
+      50% {
+        transform: scale(1.1);
+        opacity: 1;
+      }
+
+      100% {
+        transform: scale(1);
+        opacity: 0.9;
+      }
+    }
+
+    /* Floating Mouth-Open Tip */
+    .mouth-tip {
+      position: absolute;
+      top: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(15, 18, 26, 0.88);
+      border: 1px solid #fffc00;
+      color: #fffc00;
+      padding: 5px 14px;
+      border-radius: 20px;
+      font-size: 0.78rem;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      pointer-events: none;
+      z-index: 40;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+      white-space: nowrap;
+    }
+
+    /* Snapchat Tap-to-Edit Caption Bar */
+    .snap-caption-bar {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 18%;
+      background: rgba(0, 0, 0, 0.62);
+      backdrop-filter: blur(4px);
+      color: #ffffff;
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.95rem;
+      font-weight: 600;
+      text-align: center;
+      padding: 7px 14px;
+      letter-spacing: 0.3px;
+      outline: none;
+      z-index: 38;
+      user-select: text;
+      cursor: text;
+      text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+      border-top: 1px solid rgba(255, 255, 255, 0.15);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+      transition: background 0.2s ease, border-color 0.2s ease;
+    }
+
+    .snap-caption-bar:focus {
+      background: rgba(0, 0, 0, 0.85);
+      border-top: 1px solid var(--accent);
+      border-bottom: 1px solid var(--accent);
+    }
+
+    /* Rosy Cheeks Blush */
+    .blush-circle {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255, 64, 129, 0.52) 0%, rgba(255, 64, 129, 0.18) 55%, transparent 75%);
+      filter: blur(5px);
+      pointer-events: none;
+    }
+
+    /* Interactive Fit Tuner Drawer */
+    .fit-tuner {
+      background: #0d1017;
+      border: 1px solid #28334a;
+      border-radius: 10px;
+      padding: 8px 12px;
+      margin-top: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .tuner-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.76rem;
+      color: #b8c4d8;
+      flex: 1;
+      min-width: 135px;
+    }
+
+    .tuner-row input[type=range] {
+      flex: 1;
+      accent-color: #fffc00;
+      height: 4px;
+      cursor: pointer;
+    }
+
+    /* SNAPCHAT LENS CAROUSEL */
+    .lens-carousel-container {
+      width: 100%;
+      margin-top: 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .carousel-label {
+      font-size: 0.76rem;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+    }
+
+    .lens-carousel {
+      display: flex;
+      gap: 10px;
+      overflow-x: auto;
+      width: 100%;
+      padding: 4px 2px 8px 2px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+      align-items: center;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .lens-bubble {
+      flex: 0 0 auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      cursor: pointer;
+      user-select: none;
+      position: relative;
+    }
+
+    .lens-circle {
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      background: #1c2132;
+      border: 3px solid #2f3750;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.45rem;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+      transition: transform 0.15s ease, border-color 0.15s ease;
+    }
+
+    .lens-bubble.active .lens-circle {
+      border-color: var(--accent);
+      background: #272d42;
+      transform: scale(1.08);
+      box-shadow: 0 0 16px rgba(255, 252, 0, 0.6);
+    }
+
+    .lens-bubble.recommended .lens-circle {
+      border-color: #fffc00;
+      box-shadow: 0 0 12px rgba(255, 252, 0, 0.5);
+    }
+
+    .recommended-tag {
+      background: #fffc00;
+      color: #000;
+      font-size: 0.58rem;
+      font-weight: 800;
+      padding: 1px 4px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .lens-name {
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    .lens-bubble.active .lens-name {
+      color: #fff;
+      font-weight: 700;
+    }
+
+    /* Filters Bar */
+    .filter-scroll {
+      display: flex;
+      gap: 7px;
+      overflow-x: auto;
+      width: 100%;
+      padding: 4px 2px 6px 2px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .filter-btn {
+      flex: 0 0 auto;
+      background: #1c2132;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 5px 11px;
+      border-radius: 16px;
+      font-size: 0.76rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .filter-btn.active {
+      background: var(--snap-pink);
+      border-color: var(--snap-pink);
+      color: #fff;
+      box-shadow: 0 0 10px rgba(255, 59, 105, 0.4);
+    }
+
+    /* Filter Classes */
+    .filter-normal {
+      filter: none;
+    }
+
+    .filter-retro {
+      filter: sepia(45%) saturate(145%) contrast(110%) hue-rotate(-15deg);
+    }
+
+    .filter-bw {
+      filter: grayscale(100%) contrast(125%);
+    }
+
+    .filter-silver {
+      filter: grayscale(100%) contrast(190%) brightness(105%);
+    }
+
+    .filter-sepia {
+      filter: sepia(90%) contrast(95%) brightness(95%);
+    }
+
+    .filter-golden {
+      filter: saturate(160%) brightness(105%) contrast(105%) sepia(25%);
+    }
+
+    .filter-peach {
+      filter: sepia(25%) saturate(165%) hue-rotate(-20deg) brightness(105%);
+    }
+
+    .filter-pink {
+      filter: saturate(145%) brightness(108%) hue-rotate(330deg) contrast(105%);
+    }
+
+    .filter-ice {
+      filter: saturate(110%) hue-rotate(190deg) contrast(115%) brightness(105%);
+    }
+
+    .filter-cyberpunk {
+      filter: saturate(190%) contrast(130%) hue-rotate(180deg);
+    }
+
+    .filter-y2k {
+      filter: invert(12%) saturate(190%) contrast(135%) hue-rotate(270deg);
+    }
+
+    .filter-dreamy {
+      filter: brightness(112%) contrast(92%) saturate(125%) blur(0.3px);
+    }
+
+    .controls-panel {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      margin-top: 12px;
+      width: 100%;
+    }
+
+    .shutter-btn {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      background: var(--snap-pink);
+      border: 5px solid #fff;
+      cursor: pointer;
+      box-shadow: 0 0 20px rgba(255, 59, 105, 0.6);
+      transition: transform 0.12s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .shutter-btn:active {
+      transform: scale(0.9);
+    }
+
+    .btn-secondary {
+      background: #232a3d;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 9px 13px;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 0.82rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.2s ease;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+      max-height: 870px;
+    }
+
+    .sidebar h2 {
+      font-size: 1.05rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .mode-switch {
+      display: flex;
+      background: #0d0f16;
+      border-radius: 10px;
+      padding: 3px;
+      margin-bottom: 10px;
+      border: 1px solid var(--border);
+    }
+
+    .mode-btn {
+      flex: 1;
+      padding: 7px 8px;
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      border-radius: 8px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .mode-btn.active {
+      background: #252c40;
+      color: #fff;
+    }
+
+    .preview-box {
+      flex: 1;
+      overflow-y: auto;
+      background: #0d0f16;
+      border: 1px dashed var(--border);
+      border-radius: 12px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      min-height: 340px;
+    }
+
+    .empty-state {
+      margin: auto;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.84rem;
+      line-height: 1.5;
+    }
+
+    #stripCanvas {
+      max-width: 100%;
+      height: auto;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
+      border-radius: 4px;
+      display: none;
+    }
+
+    .action-group {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .action-group button {
+      flex: 1;
+    }
+
+    .btn-download {
+      background: #10b981;
+      border: none;
+      color: #fff;
+      padding: 10px;
+      border-radius: 10px;
+      font-weight: 700;
+      font-size: 0.85rem;
+      cursor: pointer;
+    }
+
+    .btn-download:disabled {
+      background: #273330;
+      color: #637772;
+      cursor: not-allowed;
+    }
+
+    .frame-selector {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 10px;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .frame-selector label {
+      font-size: 0.75rem;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .frame-pill {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      cursor: pointer;
+      transition: transform 0.15s;
+    }
+
+    .frame-pill.active {
+      border-color: var(--snap-pink);
+      transform: scale(1.15);
+    }
+
+    /* Mobile Rules */
+    @media (max-width: 768px) {
+      body {
+        padding: 8px 10px;
+      }
+
+      header h1 {
+        font-size: 1.7rem;
+      }
+
+      .main-layout {
+        grid-template-columns: 1fr;
+        gap: 14px;
+      }
+
+      .booth-card {
+        padding: 10px;
+      }
+
+      .viewport-container {
+        aspect-ratio: 4/3;
+        max-height: 55vh;
+        border-radius: 14px;
+      }
+
+      .duo-bar {
+        padding: 8px 10px;
+        gap: 8px;
+      }
+
+      .duo-actions {
+        width: 100%;
+        justify-content: space-between;
+      }
+
+      .join-group {
+        flex: 1;
+      }
+
+      .join-input {
+        width: 100%;
+        min-width: 80px;
+      }
+
+      .lens-circle {
+        width: 48px;
+        height: 48px;
+        font-size: 1.35rem;
+      }
+
+      .shutter-btn {
+        width: 74px;
+        height: 74px;
+      }
+
+      .btn-secondary {
+        padding: 8px 11px;
+        font-size: 0.76rem;
+      }
+
+      .sidebar {
+        padding: 12px;
+        max-height: none;
+      }
+
+      .preview-box {
+        min-height: 280px;
+      }
+    }
+
+    /* Share & Invite Modal */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.82);
+      backdrop-filter: blur(8px);
+      z-index: 9999;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+
+    .modal-card {
+      background: #141824;
+      border: 1px solid #2d3852;
+      border-radius: 20px;
+      padding: 24px 20px;
+      max-width: 420px;
+      width: 100%;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.85);
+      position: relative;
+      animation: modalPop 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      text-align: center;
+    }
+
+    @keyframes modalPop {
+      from {
+        transform: scale(0.88);
+        opacity: 0;
+      }
+
+      to {
+        transform: scale(1);
+        opacity: 1;
+      }
+    }
+
+    .modal-close {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      background: #22293d;
+      border: 1px solid #333f5c;
+      color: #fff;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 1.1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s;
+    }
+
+    .modal-close:hover {
+      background: #364468;
+    }
+
+    .qr-container {
+      background: #ffffff;
+      padding: 12px;
+      border-radius: 14px;
+      display: inline-block;
+      margin: 14px 0 10px 0;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    }
+
+    .qr-container img {
+      display: block;
+      width: 160px;
+      height: 160px;
+    }
+
+    .share-link-box {
+      display: flex;
+      gap: 6px;
+      margin: 12px 0 14px 0;
+    }
+
+    .share-link-input {
+      flex: 1;
+      background: #0b0e16;
+      border: 1px solid #28334a;
+      border-radius: 10px;
+      padding: 10px 12px;
+      color: #fffc00;
+      font-size: 0.82rem;
+      font-family: 'Space Mono', monospace;
+      outline: none;
+    }
+
+    .share-toast {
+      font-size: 0.8rem;
+      color: #10b981;
+      font-weight: 700;
+      min-height: 20px;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- Share & Invite Modal -->
+  <div class="modal-backdrop" id="shareModalBackdrop">
+    <div class="modal-card">
+      <button class="modal-close" id="closeShareModalBtn" title="Close">✕</button>
+      <div style="font-size: 2rem; margin-bottom: 4px;">🎉</div>
+      <h2 style="font-size: 1.25rem; font-weight: 800; color: #fff;">Share SnapBooth</h2>
+      <p style="font-size: 0.82rem; color: #8e9bb3; margin-top: 4px;">
+        Invite your friend to join this booth live! Point your mobile camera at the QR code or send the link:
+      </p>
+
+      <div class="qr-container">
+        <img id="shareQrImg" src="" alt="Scan QR Code to Join" />
+      </div>
+      <div style="font-size: 0.72rem; color: #6b778d; font-weight: 600;">📷 Point phone camera to open app</div>
+
+      <div class="share-link-box">
+        <input type="text" class="share-link-input" id="shareLinkInput" readonly />
+        <button class="btn-sm btn-accent" id="copyShareLinkModalBtn" style="padding: 0 14px; font-weight: 700;">📋
+          Copy</button>
+      </div>
+
+      <button class="btn-secondary" id="nativeShareBtn"
+        style="width: 100%; justify-content: center; padding: 11px; font-size: 0.88rem; background: #222b40; border-color: #3b4b6e;">
+        📲 Share via WhatsApp / Apps
+      </button>
+
+      <div class="share-toast" id="shareToast"></div>
+    </div>
+  </div>
+
+  <header>
+    <div style="display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap;">
+      <h1>📸 SnapBooth</h1>
+      <button class="btn-sm btn-accent" id="openShareModalBtn"
+        style="padding: 6px 14px; border-radius: 20px; font-weight: 800; font-size: 0.82rem; box-shadow: 0 0 14px rgba(255,252,0,0.35); cursor: pointer;">
+        🔗 Share Link & QR
+      </button>
+    </div>
+    <p>AI 3D Snapchat Lenses • Multi-Face Tracking • Dual Cam Merging</p>
+  </header>
+
+  <!-- Remote Friend WebRTC Connection Bar -->
+  <div class="duo-bar">
+    <div class="duo-status">
+      <span class="status-dot" id="statusDot"></span>
+      <span id="duoStatusText">Solo Booth (Ready for Friend)</span>
+    </div>
+    <div class="duo-actions">
+      <div class="room-badge">Room Code: <strong id="myRoomCode">Connecting...</strong></div>
+      <button class="btn-sm" id="copyInviteBtn" title="Copy link or QR to share with friend">🔗 Share Invite</button>
+      <div class="join-group">
+        <input type="text" class="join-input" id="friendRoomInput" placeholder="Friend Code..." />
+        <button class="btn-sm btn-accent" id="joinFriendBtn">Connect</button>
+      </div>
+      <button class="btn-sm" id="toggleDemoDuoBtn" title="Test dual merged booth immediately">🧪 Test Duo</button>
+    </div>
+  </div>
+
+  <main class="main-layout">
+    <!-- Camera Viewport Area -->
+    <div class="booth-card">
+      <div class="viewport-container" id="viewportContainer">
+        <div class="video-stage" id="videoStage">
+          <!-- Local User Cam -->
+          <div class="video-slot" id="localSlot">
+            <video id="videoElement" autoplay playsinline webkit-playsinline></video>
+
+            <!-- Open Mouth Surprise Floating Indicator -->
+            <div id="openMouthTip" class="mouth-tip" style="display:none;">😮 Open mouth for surprise!</div>
+
+            <!-- Snapchat Lens Props Layer -->
+            <div id="lensOverlay">
+              <!-- Face 1 Slots -->
+              <div id="propSlotA" class="lens-anchor-prop" style="display:none;">
+                <div class="prop-inner-anim" id="propInnerA"></div>
+              </div>
+              <div id="propSlotB" class="lens-anchor-prop" style="display:none;">
+                <div class="prop-inner-anim" id="propInnerB"></div>
+              </div>
+              <div id="propSlotC" class="lens-anchor-prop" style="display:none;">
+                <div class="prop-inner-anim" id="propInnerC"></div>
+              </div>
+              <div id="blushL" class="lens-anchor-prop" style="display:none;">
+                <div class="blush-circle"></div>
+              </div>
+              <div id="blushR" class="lens-anchor-prop" style="display:none;">
+                <div class="blush-circle"></div>
+              </div>
+
+              <!-- Face 2 Slots (When 2 friends are in the camera together!) -->
+              <div id="propSlotA2" class="lens-anchor-prop" style="display:none;">
+                <div class="prop-inner-anim" id="propInnerA2"></div>
+              </div>
+              <div id="propSlotB2" class="lens-anchor-prop" style="display:none;">
+                <div class="prop-inner-anim" id="propInnerB2"></div>
+              </div>
+              <div id="propSlotC2" class="lens-anchor-prop" style="display:none;">
+                <div class="prop-inner-anim" id="propInnerC2"></div>
+              </div>
+              <div id="blushL2" class="lens-anchor-prop" style="display:none;">
+                <div class="blush-circle"></div>
+              </div>
+              <div id="blushR2" class="lens-anchor-prop" style="display:none;">
+                <div class="blush-circle"></div>
+              </div>
+            </div>
+
+            <!-- Dynamic Landmark tracking dots -->
+            <div id="landmarksContainer"></div>
+            <div class="slot-badge" id="localBadge">You 👤</div>
+          </div>
+
+          <!-- Remote Online Friend Cam (MUTED added to satisfy browser autoplay policy!) -->
+          <div class="video-slot" id="remoteSlot" style="display: none;">
+            <video id="remoteVideo" autoplay playsinline webkit-playsinline muted></video>
+            <div id="remoteLensOverlay">
+              <div id="remotePropSlotA" class="lens-anchor-prop" style="display:none;">
+                <div class="prop-inner-anim" id="remotePropInnerA"></div>
+              </div>
+              <div id="remotePropSlotB" class="lens-anchor-prop" style="display:none;">
+                <div class="prop-inner-anim" id="remotePropInnerB"></div>
+              </div>
+            </div>
+            <div class="slot-badge" id="remoteBadge" style="background: rgba(255, 59, 105, 0.85);">Friend 💖</div>
+          </div>
+          <div class="duo-divider"></div>
+        </div>
+
+        <!-- Snapchat Tap-to-Edit Caption Bar -->
+        <div class="snap-caption-bar" id="snapCaptionBar" contenteditable="true" spellcheck="false"
+          title="Tap to type snap caption">Snap moments ✨</div>
+
+        <!-- Biometric Face Scanner Overlay (Non-blocking by default) -->
+        <div id="scannerOverlay" class="scanner-overlay" style="display: none;">
+          <div class="scanner-reticle">
+            <div class="scanner-laser"></div>
+          </div>
+          <div class="scanner-status" id="scannerStatusText">
+            🔍 Scanning Face Geometry & Shape...
+          </div>
+        </div>
+
+        <div class="flash-overlay" id="flashOverlay"></div>
+        <div class="countdown-overlay" id="countdownOverlay">3</div>
+      </div>
+
+      <!-- Face Shape & Calibration Metrics Card -->
+      <div class="face-analysis-card" id="faceAnalysisCard">
+        <div class="face-metrics-info">
+          <span class="metric-pill">Face Shape: <strong id="faceShapeVal">Analyzing...</strong></span>
+          <span class="metric-pill">Eye Span: <strong id="eyeSpanVal">--</strong></span>
+          <span class="metric-pill">Upper Lip: <strong id="mustacheVal">--</strong></span>
+        </div>
+        <div style="display: flex; gap: 6px; align-items: center;">
+          <button class="btn-rescan" id="toggleTunerBtn" title="Fine-tune prop fit"
+            style="background: #1f273b; border-color: #fffc00; color: #fffc00;">📐 Adjust Fit</button>
+          <button class="btn-rescan" id="reScanBtn">🔍 Re-Scan Face</button>
+        </div>
+
+        <!-- Interactive Fit Tuner Drawer -->
+        <div class="fit-tuner" id="fitTunerBar" style="display: none; width: 100%;">
+          <div class="tuner-row">
+            <span>Size: <strong id="sizeValLabel" style="color: #fffc00;">100%</strong></span>
+            <input type="range" id="sizeRange" min="70" max="140" value="100" />
+          </div>
+          <div class="tuner-row">
+            <span>Height: <strong id="posValLabel" style="color: #fffc00;">0px</strong></span>
+            <input type="range" id="posRange" min="-40" max="40" value="0" />
+          </div>
+          <button class="btn-rescan" id="resetTunerBtn" style="padding: 2px 8px; font-size: 0.72rem;">↺ Reset</button>
+        </div>
+      </div>
+
+      <!-- SNAPCHAT LENS CAROUSEL -->
+      <div class="lens-carousel-container">
+        <div class="carousel-label">
+          <span>✨ Tailored Snapchat Lenses</span>
+          <span style="font-size:0.7rem; color:#fffc00;">⭐ Best Fit marked for your face</span>
+        </div>
+        <div class="lens-carousel" id="lensCarousel">
+          <!-- None / Natural -->
+          <div class="lens-bubble active" data-lens="none">
+            <div class="lens-circle">🚫</div>
+            <div class="lens-name">Natural</div>
+          </div>
+          <!-- Puppy / Dog -->
+          <div class="lens-bubble" data-lens="puppy">
+            <div class="lens-circle">🐶</div>
+            <div class="lens-name">Puppy</div>
+          </div>
+          <!-- Golden Butterflies -->
+          <div class="lens-bubble" data-lens="butterfly">
+            <div class="lens-circle">🦋</div>
+            <div class="lens-name">Butterflies</div>
+          </div>
+          <!-- Fire Devil -->
+          <div class="lens-bubble" data-lens="devil">
+            <div class="lens-circle">😈</div>
+            <div class="lens-name">Fire Devil</div>
+          </div>
+          <!-- Flower Crown -->
+          <div class="lens-bubble" data-lens="flowers">
+            <div class="lens-circle">🌸</div>
+            <div class="lens-name">Flowers</div>
+          </div>
+          <!-- Thug / Boss Sunglasses & Mustache -->
+          <div class="lens-bubble" data-lens="thug">
+            <div class="lens-circle">🕶️</div>
+            <div class="lens-name">Thug Boss</div>
+          </div>
+          <!-- Cyber Visor -->
+          <div class="lens-bubble" data-lens="cyber">
+            <div class="lens-circle">⚡</div>
+            <div class="lens-name">Cyber Visor</div>
+          </div>
+          <!-- Kitty / Cat -->
+          <div class="lens-bubble" data-lens="kitty">
+            <div class="lens-circle">🐱</div>
+            <div class="lens-name">Kitty</div>
+          </div>
+          <!-- Heart Eyes & Glow -->
+          <div class="lens-bubble" data-lens="hearts">
+            <div class="lens-circle">💖</div>
+            <div class="lens-name">Heart Eyes</div>
+          </div>
+          <!-- Princess Golden Tiara -->
+          <div class="lens-bubble" data-lens="princess">
+            <div class="lens-circle">👑</div>
+            <div class="lens-name">Princess</div>
+          </div>
+          <!-- Angel Halo & Sparkles -->
+          <div class="lens-bubble" data-lens="angel">
+            <div class="lens-circle">😇</div>
+            <div class="lens-name">Angel</div>
+          </div>
+          <!-- Bunny Ears -->
+          <div class="lens-bubble" data-lens="bunny">
+            <div class="lens-circle">🐰</div>
+            <div class="lens-name">Bunny</div>
+          </div>
+          <!-- Kawaii Bow -->
+          <div class="lens-bubble" data-lens="bow">
+            <div class="lens-circle">🎀</div>
+            <div class="lens-name">Cute Bow</div>
+          </div>
+          <!-- Gentleman Mustache -->
+          <div class="lens-bubble" data-lens="mustache">
+            <div class="lens-circle">🥸</div>
+            <div class="lens-name">Mustache</div>
+          </div>
+          <!-- Alien Antenna -->
+          <div class="lens-bubble" data-lens="alien">
+            <div class="lens-circle">👽</div>
+            <div class="lens-name">Alien</div>
+          </div>
+          <!-- Starburst Sparkles -->
+          <div class="lens-bubble" data-lens="sparkles">
+            <div class="lens-circle">✨</div>
+            <div class="lens-name">Sparkles</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Filters Bar -->
+      <div class="filter-scroll" id="filterBar">
+        <button class="filter-btn active" data-filter="filter-normal">Normal</button>
+        <button class="filter-btn" data-filter="filter-retro">🎞️ Retro 70s</button>
+        <button class="filter-btn" data-filter="filter-bw">🖤 Film Noir</button>
+        <button class="filter-btn" data-filter="filter-silver">🪙 Silver</button>
+        <button class="filter-btn" data-filter="filter-sepia">☕ Sepia</button>
+        <button class="filter-btn" data-filter="filter-golden">🌅 Sunset</button>
+        <button class="filter-btn" data-filter="filter-peach">🍑 Peachy</button>
+        <button class="filter-btn" data-filter="filter-pink">🌸 Barbie</button>
+        <button class="filter-btn" data-filter="filter-ice">🧊 Cool Ice</button>
+        <button class="filter-btn" data-filter="filter-cyberpunk">🌆 Cyberpunk</button>
+        <button class="filter-btn" data-filter="filter-y2k">🪩 Y2K</button>
+        <button class="filter-btn" data-filter="filter-dreamy">✨ Dreamy</button>
+      </div>
+
+      <!-- Controls -->
+      <div class="controls-panel">
+        <button class="btn-secondary" id="flipMirrorBtn" title="Mirror Camera">🔄 Mirror</button>
+        <button class="btn-secondary" id="switchCamBtn" title="Switch Front/Back Camera on mobile">📷 Cam</button>
+        <button class="shutter-btn" id="shutterBtn" title="Take Snap"></button>
+        <button class="btn-secondary" id="timerModeBtn" title="Timer interval">⏱️ 3s</button>
+      </div>
+    </div>
+
+    <!-- Output / Strip Preview Sidebar -->
+    <div class="sidebar">
+      <h2>
+        <span>🎞️ Your Keepsake</span>
+      </h2>
+
+      <!-- Mode Selector -->
+      <div class="mode-switch">
+        <button class="mode-btn active" id="modeStrip">4-Photo Strip</button>
+        <button class="mode-btn" id="modeSingle">Single Snap</button>
+      </div>
+
+      <!-- Frame Color Choices -->
+      <div class="frame-selector">
+        <label>Frame Color:</label>
+        <div style="display: flex; gap: 8px;">
+          <div class="frame-pill active" data-color="#ffffff" style="background: #ffffff;" title="Classic White"></div>
+          <div class="frame-pill" data-color="#121212" style="background: #121212; border: 1px solid #444;"
+            title="Midnight Dark"></div>
+          <div class="frame-pill" data-color="#ffd5df" style="background: #ffd5df;" title="Pastel Blush"></div>
+          <div class="frame-pill" data-color="#fffc00" style="background: #fffc00;" title="Snap Yellow"></div>
+        </div>
+      </div>
+
+      <!-- Canvas for render -->
+      <div class="preview-box">
+        <div class="empty-state" id="emptyState">
+          📸 Face shape analyzed! Tap any lens to wear it, then hit the pink shutter!
+        </div>
+        <canvas id="stripCanvas"></canvas>
+      </div>
+
+      <!-- Action buttons -->
+      <div class="action-group">
+        <button class="btn-download" id="downloadBtn" disabled>💾 Save Image</button>
+        <button class="btn-secondary" id="printBtn" disabled>🖨️ Print</button>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // -------------------------------------------------------------
+    // SNAPBOOTH STATE & CONFIG
+    // -------------------------------------------------------------
+    let stream = null;
+    let isMirrored = true;
+    let currentFacingMode = 'user';
+    let selectedFilter = 'filter-normal';
+    let currentMode = 'strip';
+    let frameColor = '#ffffff';
+    let isShooting = false;
+    let capturedFrames = [];
+
+    // Lenses & Calibration
+    let currentLens = 'none';
+    let calibratedMetrics = null;
+    let manualScale = 1.0;
+    let manualYOffset = 0;
+    let wasMouthOpenPreviously = false;
+
+    // Timer Mode: 3s, 5s, 10s, 0s (Instant)
+    const timerOptions = [3, 5, 10, 0];
+    let timerIdx = 0;
+    let timerSeconds = 3;
+
+    // Multi-Face Prediction Cache & Detection Lock (Prevents concurrent TF.js calls)
+    let blazefaceModel = null;
+    let isDetecting = false;
+    let lastPredictions = [];
+    let blazeFaceInitialized = false;
+    let peerInitialized = false;
+
+    // Temporal Smoothing Caches
+    let smoothedFaces = [null, null];
+    const SMOOTH_ALPHA = 0.42;
+
+    // WebRTC Online Duo State
+    let isDuoMode = false;
+    let isDemoDuo = false;
+    let peer = null;
+    let myPeerId = null;
+    let activeDataConn = null;
+    let activeMediaCall = null;
+
+    // DOM Elements
+    const video = document.getElementById('videoElement');
+    const remoteVideo = document.getElementById('remoteVideo');
+    const videoStage = document.getElementById('videoStage');
+    const localSlot = document.getElementById('localSlot');
+    const remoteSlot = document.getElementById('remoteSlot');
+    const viewportContainer = document.getElementById('viewportContainer');
+    const lensOverlay = document.getElementById('lensOverlay');
+    const scannerOverlay = document.getElementById('scannerOverlay');
+    const scannerStatusText = document.getElementById('scannerStatusText');
+    const landmarksContainer = document.getElementById('landmarksContainer');
+    const faceShapeVal = document.getElementById('faceShapeVal');
+    const eyeSpanVal = document.getElementById('eyeSpanVal');
+    const mustacheVal = document.getElementById('mustacheVal');
+    const reScanBtn = document.getElementById('reScanBtn');
+    const shutterBtn = document.getElementById('shutterBtn');
+    const flipMirrorBtn = document.getElementById('flipMirrorBtn');
+    const switchCamBtn = document.getElementById('switchCamBtn');
+    const flashOverlay = document.getElementById('flashOverlay');
+    const countdownOverlay = document.getElementById('countdownOverlay');
+    const filterButtons = document.querySelectorAll('.filter-btn');
+    const modeStrip = document.getElementById('modeStrip');
+    const modeSingle = document.getElementById('modeSingle');
+    const framePills = document.querySelectorAll('.frame-pill');
+    const stripCanvas = document.getElementById('stripCanvas');
+    const emptyState = document.getElementById('emptyState');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const printBtn = document.getElementById('printBtn');
+    const timerModeBtn = document.getElementById('timerModeBtn');
+    const snapCaptionBar = document.getElementById('snapCaptionBar');
+    const openMouthTip = document.getElementById('openMouthTip');
+
+    // Face 1 Slots
+    const propSlotA = document.getElementById('propSlotA');
+    const propInnerA = document.getElementById('propInnerA');
+    const propSlotB = document.getElementById('propSlotB');
+    const propInnerB = document.getElementById('propInnerB');
+    const propSlotC = document.getElementById('propSlotC');
+    const propInnerC = document.getElementById('propInnerC');
+    const blushL = document.getElementById('blushL');
+    const blushR = document.getElementById('blushR');
+
+    // Face 2 Slots (Multi-face)
+    const propSlotA2 = document.getElementById('propSlotA2');
+    const propInnerA2 = document.getElementById('propInnerA2');
+    const propSlotB2 = document.getElementById('propSlotB2');
+    const propInnerB2 = document.getElementById('propInnerB2');
+    const propSlotC2 = document.getElementById('propSlotC2');
+    const propInnerC2 = document.getElementById('propInnerC2');
+    const blushL2 = document.getElementById('blushL2');
+    const blushR2 = document.getElementById('blushR2');
+
+    // Duo Bar Elements
+    const statusDot = document.getElementById('statusDot');
+    const duoStatusText = document.getElementById('duoStatusText');
+    const myRoomCodeEl = document.getElementById('myRoomCode');
+    const copyInviteBtn = document.getElementById('copyInviteBtn');
+    const friendRoomInput = document.getElementById('friendRoomInput');
+    const joinFriendBtn = document.getElementById('joinFriendBtn');
+    const toggleDemoDuoBtn = document.getElementById('toggleDemoDuoBtn');
+
+    // Interactive Tuner Elements
+    const toggleTunerBtn = document.getElementById('toggleTunerBtn');
+    const fitTunerBar = document.getElementById('fitTunerBar');
+    const sizeRange = document.getElementById('sizeRange');
+    const posRange = document.getElementById('posRange');
+    const sizeValLabel = document.getElementById('sizeValLabel');
+    const posValLabel = document.getElementById('posValLabel');
+    const resetTunerBtn = document.getElementById('resetTunerBtn');
+
+    // -------------------------------------------------------------
+    // HIGH-FIDELITY VECTOR SVGs (WITH EXPLICIT WIDTH & HEIGHT FOR CANVAS)
+    // -------------------------------------------------------------
+    const SNAP_SVGS = {
+      dogEars: `<svg width="260" height="120" viewBox="0 0 260 120" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="dogFur" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#b5734c"/><stop offset="60%" stop-color="#8d4925"/><stop offset="100%" stop-color="#5c2c11"/>
+          </linearGradient>
+          <linearGradient id="dogDark" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#7a3e1b"/><stop offset="100%" stop-color="#4a220c"/>
+          </linearGradient>
+        </defs>
+        <path d="M50 15 C10 18 -10 65 5 105 C15 125 45 115 55 90 C62 70 58 35 50 15 Z" fill="url(#dogFur)" stroke="#4a220c" stroke-width="3"/>
+        <path d="M35 30 C20 40 12 70 22 95 C28 105 40 102 46 88 C50 75 45 45 35 30 Z" fill="url(#dogDark)"/>
+        <path d="M210 15 C250 18 270 65 255 105 C245 125 215 115 205 90 C198 70 202 35 210 15 Z" fill="url(#dogFur)" stroke="#4a220c" stroke-width="3"/>
+        <path d="M225 30 C240 40 248 70 238 95 C232 105 220 102 214 88 C210 75 215 45 225 30 Z" fill="url(#dogDark)"/>
+      </svg>`,
+
+      dogNose: `<svg width="140" height="120" viewBox="0 0 140 120" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <radialGradient id="dogNoseGrad" cx="35%" cy="35%" r="65%">
+            <stop offset="0%" stop-color="#4a4a4a"/><stop offset="60%" stop-color="#1c1c1c"/><stop offset="100%" stop-color="#000000"/>
+          </radialGradient>
+        </defs>
+        <path d="M42 25 C42 12 98 12 98 25 C98 48 70 60 70 60 C70 60 42 48 42 25 Z" fill="url(#dogNoseGrad)" stroke="#111" stroke-width="2"/>
+        <ellipse cx="56" cy="22" rx="7" ry="4" fill="#ffffff" opacity="0.65"/>
+        <circle cx="28" cy="45" r="2.5" fill="#222"/><circle cx="18" cy="52" r="2.5" fill="#222"/><circle cx="26" cy="58" r="2.5" fill="#222"/>
+        <circle cx="112" cy="45" r="2.5" fill="#222"/><circle cx="122" cy="52" r="2.5" fill="#222"/><circle cx="114" cy="58" r="2.5" fill="#222"/>
+        <path d="M54 58 C54 95 86 95 86 58 Z" fill="#ff4081" stroke="#c2185b" stroke-width="2.5"/>
+        <line x1="70" y1="58" x2="70" y2="82" stroke="#ad1457" stroke-width="2.5" stroke-linecap="round"/>
+      </svg>`,
+
+      dogTongue: `<svg width="100" height="130" viewBox="0 0 100 130" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="tongueGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#ff4081"/><stop offset="100%" stop-color="#c2185b"/>
+          </linearGradient>
+        </defs>
+        <path d="M15 10 C15 75 25 125 50 125 C75 125 85 75 85 10 Z" fill="url(#tongueGrad)" stroke="#880e4f" stroke-width="3"/>
+        <line x1="50" y1="20" x2="50" y2="100" stroke="#ad1457" stroke-width="3.5" stroke-linecap="round"/>
+      </svg>`,
+
+      butterflyCrown: `<svg width="240" height="110" viewBox="0 0 240 110" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="bfGold" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#fff59d"/><stop offset="40%" stop-color="#ffd700"/><stop offset="100%" stop-color="#ff9800"/>
+          </linearGradient>
+        </defs>
+        <g transform="translate(30, 20) rotate(-18) scale(0.65)">
+          <path d="M40 50 C10 10 0 55 40 70 C0 85 20 115 50 85 C55 100 65 100 60 70 Z" fill="url(#bfGold)" filter="drop-shadow(0 0 8px #ffd700)"/>
+          <path d="M60 50 C90 10 100 55 60 70 C100 85 80 115 50 85 C45 100 35 100 40 70 Z" fill="url(#bfGold)"/>
+          <ellipse cx="50" cy="70" rx="3" ry="20" fill="#4a2800"/>
+        </g>
+        <g transform="translate(120, 10) scale(0.85)">
+          <g transform="translate(-50, -20)">
+            <path d="M40 50 C0 0 -10 50 40 68 C-10 82 15 120 50 85 Z" fill="url(#bfGold)" filter="drop-shadow(0 0 12px #ffeb3b)"/>
+            <path d="M60 50 C100 0 110 50 60 68 C110 82 85 120 50 85 Z" fill="url(#bfGold)"/>
+            <ellipse cx="50" cy="68" rx="4" ry="24" fill="#3e2723"/>
+            <circle cx="44" cy="40" r="4" fill="#fff" opacity="0.8"/>
+            <circle cx="56" cy="40" r="4" fill="#fff" opacity="0.8"/>
+          </g>
+        </g>
+        <g transform="translate(180, 20) rotate(18) scale(0.65)">
+          <path d="M40 50 C10 10 0 55 40 70 C0 85 20 115 50 85 C55 100 65 100 60 70 Z" fill="url(#bfGold)" filter="drop-shadow(0 0 8px #ffd700)"/>
+          <path d="M60 50 C90 10 100 55 60 70 C100 85 80 115 50 85 C45 100 35 100 40 70 Z" fill="url(#bfGold)"/>
+          <ellipse cx="50" cy="70" rx="3" ry="20" fill="#4a2800"/>
+        </g>
+      </svg>`,
+
+      devilHorns: `<svg width="200" height="110" viewBox="0 0 200 110" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="hornG" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#ff1744"/><stop offset="50%" stop-color="#d50000"/><stop offset="100%" stop-color="#4a0000"/>
+          </linearGradient>
+        </defs>
+        <path d="M45 95 C25 60 10 20 5 2 C25 25 55 55 65 92 Z" fill="url(#hornG)" stroke="#ff5252" stroke-width="2.5" filter="drop-shadow(0 0 10px #ff1744)"/>
+        <path d="M155 95 C175 60 190 20 195 2 C175 25 145 55 135 92 Z" fill="url(#hornG)" stroke="#ff5252" stroke-width="2.5" filter="drop-shadow(0 0 10px #ff1744)"/>
+      </svg>`,
+
+      flowerCrown: `<svg width="260" height="90" viewBox="0 0 260 90" xmlns="http://www.w3.org/2000/svg">
+        <path d="M15 65 Q130 30 245 65" fill="none" stroke="#558b2f" stroke-width="4" stroke-linecap="round"/>
+        <g transform="translate(45, 50)">
+          <circle cx="0" cy="0" r="14" fill="#ff80ab"/><circle cx="0" cy="0" r="6" fill="#fff59d"/>
+        </g>
+        <g transform="translate(90, 40)">
+          <circle cx="0" cy="0" r="16" fill="#f48fb1"/><circle cx="0" cy="0" r="7" fill="#ffffff"/>
+        </g>
+        <g transform="translate(130, 36)">
+          <circle cx="0" cy="0" r="19" fill="#ff4081"/><circle cx="0" cy="0" r="8" fill="#fff59d"/>
+        </g>
+        <g transform="translate(170, 40)">
+          <circle cx="0" cy="0" r="16" fill="#f48fb1"/><circle cx="0" cy="0" r="7" fill="#ffffff"/>
+        </g>
+        <g transform="translate(215, 50)">
+          <circle cx="0" cy="0" r="14" fill="#ff80ab"/><circle cx="0" cy="0" r="6" fill="#fff59d"/>
+        </g>
+      </svg>`,
+
+      thugGlasses: `<svg width="220" height="80" viewBox="0 0 220 80" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="thugFrame" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#3d4354"/><stop offset="35%" stop-color="#181b24"/><stop offset="100%" stop-color="#080a0e"/>
+          </linearGradient>
+          <linearGradient id="thugGlint" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="rgba(255,255,255,0)"/><stop offset="50%" stop-color="rgba(255,255,255,0.7)"/><stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+          </linearGradient>
+        </defs>
+        <path d="M8 14 Q55 8 102 18 L110 20 L118 18 Q165 8 212 14 Q222 42 204 66 Q170 76 130 66 Q115 48 110 38 Q105 48 90 66 Q50 76 16 66 Q-2 42 8 14 Z" fill="url(#thugFrame)" stroke="#5a637d" stroke-width="3.5"/>
+        <path d="M18 20 Q52 16 92 24 Q82 60 52 66 Q24 60 18 20 Z" fill="#0c0e14"/>
+        <path d="M128 24 Q168 16 202 20 Q196 60 168 66 Q138 60 128 24 Z" fill="#0c0e14"/>
+        <polygon points="30,22 48,22 34,60 20,60" fill="url(#thugGlint)"/>
+        <polygon points="140,22 158,22 144,60 130,60" fill="url(#thugGlint)"/>
+      </svg>`,
+
+      cyberVisor: `<svg width="230" height="75" viewBox="0 0 230 75" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="cyberG" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#00e5ff"/><stop offset="50%" stop-color="#00b0ff"/><stop offset="100%" stop-color="#d500f9"/>
+          </linearGradient>
+        </defs>
+        <path d="M10 20 L220 20 L205 60 L25 60 Z" fill="rgba(0, 229, 255, 0.35)" stroke="url(#cyberG)" stroke-width="4" filter="drop-shadow(0 0 10px #00e5ff)"/>
+        <line x1="20" y1="38" x2="210" y2="38" stroke="#ffffff" stroke-width="2" stroke-dasharray="10, 6" opacity="0.85"/>
+        <circle cx="115" cy="38" r="8" fill="none" stroke="#00e5ff" stroke-width="2"/>
+        <circle cx="115" cy="38" r="3" fill="#ffffff"/>
+      </svg>`,
+
+      mustache: `<svg width="160" height="50" viewBox="0 0 160 50" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="mustGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#404040"/><stop offset="40%" stop-color="#181818"/><stop offset="100%" stop-color="#000000"/>
+          </linearGradient>
+        </defs>
+        <path d="M80 24 C65 12 35 2 10 24 C-3 36 15 48 28 36 C46 24 68 30 80 44 C92 30 114 24 132 36 C145 48 163 36 150 24 C125 2 95 12 80 24 Z" fill="url(#mustGrad)" stroke="#111" stroke-width="3"/>
+      </svg>`,
+
+      goldChain: `<svg width="200" height="110" viewBox="0 0 200 110" xmlns="http://www.w3.org/2000/svg">
+        <path d="M25 15 Q100 95 175 15" fill="none" stroke="#ffd700" stroke-width="14" stroke-linecap="round" stroke-dasharray="18, 6"/>
+        <circle cx="100" cy="74" r="24" fill="#ffd700" stroke="#b8860b" stroke-width="4"/>
+        <text x="100" y="83" font-size="28" font-weight="900" fill="#111" text-anchor="middle" font-family="'Space Mono', monospace">$</text>
+      </svg>`,
+
+      catEars: `<svg width="240" height="110" viewBox="0 0 240 110" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="catFurG" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#454c62"/><stop offset="60%" stop-color="#212638"/><stop offset="100%" stop-color="#121520"/>
+          </linearGradient>
+        </defs>
+        <path d="M22 102 Q10 15 65 10 Q90 48 98 102 Z" fill="url(#catFurG)" stroke="#ff80ab" stroke-width="4"/>
+        <path d="M36 96 Q30 30 62 25 Q78 58 84 96 Z" fill="#ff80ab"/>
+        <path d="M42 88 Q56 75 62 86 M58 80 Q70 68 76 84" stroke="#ffffff" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+        <path d="M218 102 Q230 15 175 10 Q150 48 142 102 Z" fill="url(#catFurG)" stroke="#ff80ab" stroke-width="4"/>
+        <path d="M204 96 Q210 30 178 25 Q162 58 156 96 Z" fill="#ff80ab"/>
+        <path d="M198 88 Q184 75 178 86 M182 80 Q170 68 164 84" stroke="#ffffff" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+        <path d="M92 100 Q120 90 148 100" stroke="#4a5568" stroke-width="6" fill="none" stroke-linecap="round"/>
+      </svg>`,
+
+      catFaceDetails: `<svg width="200" height="90" viewBox="0 0 200 90" xmlns="http://www.w3.org/2000/svg">
+        <polygon points="100,28 92,18 108,18" fill="#ff4081" stroke="#c2185b" stroke-width="1.5"/>
+        <path d="M80 20 L25 10 M80 25 L20 25 M80 30 L25 40" stroke="#ffffff" stroke-width="3" stroke-linecap="round" opacity="0.9"/>
+        <path d="M120 20 L175 10 M120 25 L180 25 M120 30 L175 40" stroke="#ffffff" stroke-width="3" stroke-linecap="round" opacity="0.9"/>
+      </svg>`,
+
+      heartGlasses: `<svg width="210" height="85" viewBox="0 0 210 85" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="hgFrame" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#ff80ab"/><stop offset="50%" stop-color="#ff4081"/><stop offset="100%" stop-color="#c2185b"/>
+          </linearGradient>
+        </defs>
+        <path d="M92 34 Q105 28 118 34" stroke="url(#hgFrame)" stroke-width="8" fill="none" stroke-linecap="round"/>
+        <path d="M55 20 C42 4 14 9 14 38 C14 62 55 82 55 82 C55 82 96 62 96 38 C96 9 68 4 55 20 Z" fill="url(#hgFrame)" stroke="#ffebee" stroke-width="3"/>
+        <path d="M55 25 C45 12 22 17 22 38 C22 56 55 74 55 74 C55 74 88 56 88 38 C88 17 65 12 55 25 Z" fill="rgba(255,64,129,0.75)"/>
+        <circle cx="36" cy="30" r="5.5" fill="#fff" opacity="0.9"/>
+        <path d="M155 20 C142 4 114 9 114 38 C114 62 155 82 155 82 C155 82 196 62 196 38 C196 9 168 4 155 20 Z" fill="url(#hgFrame)" stroke="#ffebee" stroke-width="3"/>
+        <path d="M155 25 C145 12 22 17 122 38 C122 56 155 74 155 74 C155 74 188 56 188 38 C188 17 165 12 155 25 Z" fill="rgba(255,64,129,0.75)"/>
+        <circle cx="136" cy="30" r="5.5" fill="#fff" opacity="0.9"/>
+      </svg>`,
+
+      heartBurst: `<svg width="160" height="160" viewBox="0 0 160 160" xmlns="http://www.w3.org/2000/svg">
+        <path d="M80 50 C70 28 35 28 35 60 C35 88 80 118 80 118 C80 118 125 88 125 60 C125 28 90 28 80 50 Z" fill="#ff1744" filter="drop-shadow(0 0 10px #ff4081)"/>
+        <path d="M30 25 C24 10 5 10 5 32 C5 48 30 68 30 68 C30 68 55 48 55 32 C55 10 36 10 30 25 Z" fill="#ff4081"/>
+        <path d="M130 25 C124 10 105 10 105 32 C105 48 130 68 130 68 C130 68 155 48 155 32 C155 10 136 10 130 25 Z" fill="#ff4081"/>
+      </svg>`,
+
+      crown: `<svg width="170" height="105" viewBox="0 0 170 105" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="crownGold" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#fff9c4"/><stop offset="40%" stop-color="#ffd700"/><stop offset="80%" stop-color="#ff9800"/><stop offset="100%" stop-color="#b8860b"/>
+          </linearGradient>
+        </defs>
+        <path d="M15 90 L30 38 L60 65 L85 18 L110 65 L140 38 L155 90 Z" fill="url(#crownGold)" stroke="#b8860b" stroke-width="3.5"/>
+        <circle cx="85" cy="22" r="8.5" fill="#ff1744" stroke="#ffffff" stroke-width="2"/>
+        <circle cx="30" cy="42" r="6.5" fill="#00e5ff" stroke="#fff" stroke-width="1.8"/>
+        <circle cx="140" cy="42" r="6.5" fill="#00e5ff" stroke="#fff" stroke-width="1.8"/>
+      </svg>`,
+
+      halo: `<svg width="190" height="75" viewBox="0 0 190 75" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="haloGold" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#ffd54f"/><stop offset="50%" stop-color="#ffffff"/><stop offset="100%" stop-color="#ffb300"/>
+          </linearGradient>
+        </defs>
+        <ellipse cx="95" cy="38" rx="82" ry="24" fill="none" stroke="url(#haloGold)" stroke-width="13"/>
+        <ellipse cx="95" cy="38" rx="80" ry="22" fill="none" stroke="#ffffff" stroke-width="3"/>
+      </svg>`,
+
+      bunnyEars: `<svg width="170" height="150" viewBox="0 0 170 150" xmlns="http://www.w3.org/2000/svg">
+        <path d="M42 145 C14 92 20 20 52 8 C72 0 80 75 62 145 Z" fill="#ffffff" stroke="#ffb6c1" stroke-width="4"/>
+        <path d="M45 135 C28 92 34 35 52 24 C64 19 68 72 57 135 Z" fill="#ff80ab"/>
+        <path d="M128 145 C156 92 150 20 118 8 C98 0 90 75 108 145 Z" fill="#ffffff" stroke="#ffb6c1" stroke-width="4"/>
+        <path d="M125 135 C142 92 136 35 118 24 C106 19 102 72 113 135 Z" fill="#ff80ab"/>
+      </svg>`,
+
+      bow: `<svg width="140" height="85" viewBox="0 0 140 85" xmlns="http://www.w3.org/2000/svg">
+        <path d="M70 42 C45 12 10 18 15 45 C20 68 55 58 70 45 Z" fill="#ff4081" stroke="#ad1457" stroke-width="3"/>
+        <path d="M70 42 C95 12 130 18 125 45 C120 68 85 58 70 45 Z" fill="#ff4081" stroke="#ad1457" stroke-width="3"/>
+        <path d="M60 48 L35 78 L55 75 L68 52 Z" fill="#e91e63"/>
+        <path d="M80 48 L105 78 L85 75 L72 52 Z" fill="#e91e63"/>
+        <ellipse cx="70" cy="42" rx="14" ry="12" fill="#f48fb1" stroke="#ad1457" stroke-width="2.5"/>
+      </svg>`,
+
+      alienAntenna: `<svg width="200" height="110" viewBox="0 0 200 110" xmlns="http://www.w3.org/2000/svg">
+        <path d="M50 100 Q30 50 20 20" fill="none" stroke="#76ff03" stroke-width="6" stroke-linecap="round"/>
+        <circle cx="20" cy="16" r="12" fill="#76ff03" filter="drop-shadow(0 0 10px #76ff03)"/>
+        <path d="M150 100 Q170 50 180 20" fill="none" stroke="#76ff03" stroke-width="6" stroke-linecap="round"/>
+        <circle cx="180" cy="16" r="12" fill="#76ff03" filter="drop-shadow(0 0 10px #76ff03)"/>
+      </svg>`,
+
+      sparkles: `<svg width="220" height="110" viewBox="0 0 220 110" xmlns="http://www.w3.org/2000/svg">
+        <path d="M35 45 Q48 45 48 32 Q48 45 61 45 Q48 45 48 58 Q48 45 35 45 Z" fill="#ffd700"/>
+        <circle cx="72" cy="28" r="4.5" fill="#ff4081"/>
+        <path d="M175 40 Q188 40 188 27 Q188 40 201 40 Q188 40 188 53 Q188 40 175 40 Z" fill="#ff4081"/>
+        <circle cx="160" cy="55" r="5" fill="#ffd700"/>
+      </svg>`
+    };
+
+    const PRELOADED_SVGS = {};
+    for (let key in SNAP_SVGS) {
+      const img = new Image();
+      img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(SNAP_SVGS[key]);
+      PRELOADED_SVGS[key] = img;
+    }
+
+    // -------------------------------------------------------------
+    // AUDIO ENGINE (RESILIENT BROWSER USER-GESTURE RESUME)
+    // -------------------------------------------------------------
+    let audioCtx = null;
+    function ensureAudio() {
+      try {
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
+      } catch (e) { }
+    }
+    document.addEventListener('pointerdown', ensureAudio, { once: false });
+
+    function playBeep(freq = 600, duration = 0.08) {
+      try {
+        ensureAudio();
+        if (!audioCtx) return;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.frequency.value = freq;
+        osc.type = 'sine';
+        gain.gain.setValueAtTime(0.18, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration);
+      } catch (e) { }
+    }
+
+    function playShutterSound() {
+      playBeep(900, 0.03);
+      setTimeout(() => playBeep(450, 0.07), 40);
+    }
+
+    function playCalibrationChime() {
+      playBeep(659, 0.1);
+      setTimeout(() => playBeep(880, 0.18), 110);
+    }
+
+    function playBubblePop() {
+      playBeep(520, 0.04);
+      setTimeout(() => playBeep(780, 0.05), 30);
+    }
+
+    function playSurpriseChime() {
+      playBeep(587, 0.06);
+      setTimeout(() => playBeep(740, 0.07), 60);
+      setTimeout(() => playBeep(988, 0.12), 120);
+    }
+
+    // -------------------------------------------------------------
+    // CAMERA & MOBILE SUPPORT
+    // -------------------------------------------------------------
+    async function startCamera() {
+      if (stream) {
+        stream.getTracks().forEach(t => t.stop());
+      }
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: currentFacingMode,
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          },
+          audio: false
+        });
+        video.srcObject = stream;
+        await video.play().catch(() => { });
+
+        if (!peerInitialized) {
+          peerInitialized = true;
+          initPeer();
+        }
+        if (!blazeFaceInitialized) {
+          blazeFaceInitialized = true;
+          initBlazeFace();
+        }
+      } catch (err) {
+        console.error("Camera access error:", err);
+        alert("Camera permission denied. Please allow camera access in browser settings to use SnapBooth.");
+      }
+    }
+
+    startCamera();
+
+    switchCamBtn.addEventListener('click', async () => {
+      currentFacingMode = (currentFacingMode === 'user') ? 'environment' : 'user';
+      isMirrored = (currentFacingMode === 'user');
+      video.classList.toggle('no-mirror', !isMirrored);
+      if (navigator.vibrate) navigator.vibrate(30);
+      await startCamera();
+    });
+
+    flipMirrorBtn.addEventListener('click', () => {
+      isMirrored = !isMirrored;
+      video.classList.toggle('no-mirror', !isMirrored);
+      if (remoteVideo) remoteVideo.classList.toggle('no-mirror', !isMirrored);
+      if (navigator.vibrate) navigator.vibrate(20);
+    });
+
+    // -------------------------------------------------------------
+    // COORDINATE CONVERSION
+    // -------------------------------------------------------------
+    function getCoverCoords(vx, vy, container) {
+      const cW = container.clientWidth || 640;
+      const cH = container.clientHeight || 480;
+      const vW = video.videoWidth || 1280;
+      const vH = video.videoHeight || 720;
+
+      const scale = Math.max(cW / vW, cH / vH);
+      const renderedW = vW * scale;
+      const renderedH = vH * scale;
+      const offsetX = (cW - renderedW) / 2;
+      const offsetY = (cH - renderedH) / 2;
+
+      let screenX = offsetX + (vx * scale);
+      let screenY = offsetY + (vy * scale);
+
+      if (isMirrored) {
+        screenX = cW - screenX;
+      }
+
+      return { x: screenX, y: screenY, scale: scale };
+    }
+
+    // -------------------------------------------------------------
+    // AI FACE TRACKING LOOP (ZERO-OVERLAP / SILKY 60FPS)
+    // -------------------------------------------------------------
+    async function initBlazeFace() {
+      if (typeof blazeface === 'undefined') return;
+      try {
+        blazefaceModel = await blazeface.load();
+        startTrackingLoop();
+      } catch (e) {
+        console.warn("BlazeFace load error:", e);
+      }
+    }
+
+    function startTrackingLoop() {
+      async function frame() {
+        if (blazefaceModel && video.readyState >= 2 && !isDetecting) {
+          isDetecting = true;
+          try {
+            const predictions = await blazefaceModel.estimateFaces(video, false);
+            if (predictions && predictions.length > 0) {
+              lastPredictions = predictions;
+              updateFaceMetrics(predictions[0]);
+
+              if (currentLens !== 'none') {
+                renderAllLenses(predictions);
+              } else {
+                hideAllSlots();
+              }
+            } else {
+              hideAllSlots();
+            }
+          } catch (err) {
+          } finally {
+            isDetecting = false;
+          }
+        }
+        requestAnimationFrame(frame);
+      }
+      requestAnimationFrame(frame);
+    }
+
+    function hideAllSlots() {
+      [propSlotA, propSlotB, propSlotC, blushL, blushR,
+        propSlotA2, propSlotB2, propSlotC2, blushL2, blushR2].forEach(slot => {
+          if (slot) slot.style.display = 'none';
+        });
+      if (openMouthTip) openMouthTip.style.display = 'none';
+    }
+
+    // -------------------------------------------------------------
+    // DYNAMIC BIOMETRIC ANALYSIS (NON-BLOCKING!)
+    // -------------------------------------------------------------
+    function updateFaceMetrics(pred) {
+      if (!pred || !pred.landmarks) return;
+
+      const rEye = pred.landmarks[0];
+      const lEye = pred.landmarks[1];
+      const nose = pred.landmarks[2];
+      const mouth = pred.landmarks[3];
+
+      const sR = getCoverCoords(rEye[0], rEye[1], localSlot);
+      const sL = getCoverCoords(lEye[0], lEye[1], localSlot);
+      const sNose = getCoverCoords(nose[0], nose[1], localSlot);
+      const sMouth = getCoverCoords(mouth[0], mouth[1], localSlot);
+
+      const eyeDist = Math.hypot(sL.x - sR.x, sL.y - sR.y);
+      const noseToMouth = Math.hypot(sMouth.x - sNose.x, sMouth.y - sNose.y);
+
+      const faceW = (pred.bottomRight[0] - pred.topLeft[0]);
+      const faceH = (pred.bottomRight[1] - pred.topLeft[1]);
+      const ratio = faceH / (faceW || 1);
+
+      let shapeName = "Oval Classic";
+      let recs = ['puppy', 'butterfly', 'thug', 'hearts'];
+      if (ratio > 1.34) {
+        shapeName = "Oblong / Rectangular";
+        recs = ['thug', 'kitty', 'cyber', 'princess'];
+      } else if (ratio < 1.14) {
+        shapeName = "Round";
+        recs = ['devil', 'bunny', 'angel', 'butterfly'];
+      } else if (Math.abs(rEye[0] - lEye[0]) / (faceW || 1) > 0.44) {
+        shapeName = "Heart Shape";
+        recs = ['hearts', 'flowers', 'kitty', 'bow'];
+      }
+
+      calibratedMetrics = {
+        shape: shapeName,
+        eyeSpan: eyeDist,
+        noseToMouth: noseToMouth,
+        recs: recs
+      };
+
+      if (faceShapeVal) faceShapeVal.textContent = shapeName;
+      if (eyeSpanVal) eyeSpanVal.textContent = `${Math.round(eyeDist)}px`;
+      if (mustacheVal) mustacheVal.textContent = `Locked (${Math.round(noseToMouth)}px)`;
+
+      document.querySelectorAll('.lens-bubble').forEach(b => {
+        const isRec = recs.includes(b.dataset.lens);
+        b.classList.toggle('recommended', isRec);
+        let tag = b.querySelector('.recommended-tag');
+        if (isRec && !tag) {
+          tag = document.createElement('div');
+          tag.className = 'recommended-tag';
+          tag.textContent = 'Best Fit';
+          b.appendChild(tag);
+        } else if (!isRec && tag) {
+          tag.remove();
+        }
+      });
+    }
+
+    if (reScanBtn) {
+      reScanBtn.addEventListener('click', () => {
+        scannerOverlay.style.display = 'flex';
+        scannerOverlay.style.opacity = '1';
+        scannerStatusText.textContent = "🔍 Calibrating Biometric Geometry...";
+        playCalibrationChime();
+        setTimeout(() => {
+          scannerOverlay.style.opacity = '0';
+          setTimeout(() => scannerOverlay.style.display = 'none', 300);
+        }, 1200);
+      });
+    }
+
+    // -------------------------------------------------------------
+    // LENS SELECTION & PROP INJECTION
+    // -------------------------------------------------------------
+    function activateLens(lensId) {
+      document.querySelectorAll('.lens-bubble').forEach(b => {
+        b.classList.toggle('active', b.dataset.lens === lensId);
+      });
+      currentLens = lensId;
+      playBubblePop();
+      if (navigator.vibrate) navigator.vibrate(20);
+
+      if (currentLens === 'none') {
+        hideAllSlots();
+        return;
+      }
+
+      if (['puppy', 'thug', 'hearts', 'devil'].includes(currentLens)) {
+        if (openMouthTip) {
+          openMouthTip.style.display = 'block';
+          openMouthTip.textContent = '😮 Open mouth for surprise!';
+        }
+      } else {
+        if (openMouthTip) openMouthTip.style.display = 'none';
+      }
+
+      setupSlotContents(propInnerA, propInnerB, currentLens);
+      setupSlotContents(propInnerA2, propInnerB2, currentLens);
+    }
+
+    function setupSlotContents(innerA, innerB, lens) {
+      if (!innerA) return;
+      if (lens === 'puppy') {
+        innerA.innerHTML = SNAP_SVGS.dogEars;
+        innerA.className = 'prop-inner-anim anim-bunny-bounce';
+        if (innerB) {
+          innerB.innerHTML = SNAP_SVGS.dogNose;
+          innerB.className = 'prop-inner-anim';
+        }
+      } else if (lens === 'butterfly') {
+        innerA.innerHTML = SNAP_SVGS.butterflyCrown;
+        innerA.className = 'prop-inner-anim anim-flutter';
+        if (innerB) innerB.innerHTML = '';
+      } else if (lens === 'devil') {
+        innerA.innerHTML = SNAP_SVGS.devilHorns;
+        innerA.className = 'prop-inner-anim anim-flame';
+        if (innerB) innerB.innerHTML = '';
+      } else if (lens === 'flowers') {
+        innerA.innerHTML = SNAP_SVGS.flowerCrown;
+        innerA.className = 'prop-inner-anim';
+        if (innerB) innerB.innerHTML = '';
+      } else if (lens === 'thug') {
+        innerA.innerHTML = SNAP_SVGS.thugGlasses;
+        innerA.className = 'prop-inner-anim';
+        if (innerB) {
+          innerB.innerHTML = SNAP_SVGS.mustache;
+          innerB.className = 'prop-inner-anim';
+        }
+      } else if (lens === 'cyber') {
+        innerA.innerHTML = SNAP_SVGS.cyberVisor;
+        innerA.className = 'prop-inner-anim anim-cyber-pulse';
+        if (innerB) innerB.innerHTML = '';
+      } else if (lens === 'kitty') {
+        innerA.innerHTML = SNAP_SVGS.catEars;
+        innerA.className = 'prop-inner-anim anim-cat-twitch';
+        if (innerB) {
+          innerB.innerHTML = SNAP_SVGS.catFaceDetails;
+          innerB.className = 'prop-inner-anim';
+        }
+      } else if (lens === 'hearts') {
+        innerA.innerHTML = SNAP_SVGS.heartGlasses;
+        innerA.className = 'prop-inner-anim';
+        if (innerB) {
+          innerB.innerHTML = SNAP_SVGS.sparkles;
+          innerB.className = 'prop-inner-anim anim-sparkle';
+        }
+      } else if (lens === 'princess') {
+        innerA.innerHTML = SNAP_SVGS.crown;
+        innerA.className = 'prop-inner-anim';
+        if (innerB) {
+          innerB.innerHTML = SNAP_SVGS.sparkles;
+          innerB.className = 'prop-inner-anim anim-sparkle';
+        }
+      } else if (lens === 'angel') {
+        innerA.innerHTML = SNAP_SVGS.halo;
+        innerA.className = 'prop-inner-anim anim-halo-float';
+        if (innerB) innerB.innerHTML = '';
+      } else if (lens === 'bunny') {
+        innerA.innerHTML = SNAP_SVGS.bunnyEars;
+        innerA.className = 'prop-inner-anim anim-bunny-bounce';
+        if (innerB) {
+          innerB.innerHTML = SNAP_SVGS.dogNose;
+          innerB.className = 'prop-inner-anim';
+        }
+      } else if (lens === 'bow') {
+        innerA.innerHTML = SNAP_SVGS.bow;
+        innerA.className = 'prop-inner-anim';
+        if (innerB) innerB.innerHTML = '';
+      } else if (lens === 'mustache') {
+        innerA.innerHTML = SNAP_SVGS.mustache;
+        innerA.className = 'prop-inner-anim';
+        if (innerB) innerB.innerHTML = '';
+      } else if (lens === 'alien') {
+        innerA.innerHTML = SNAP_SVGS.alienAntenna;
+        innerA.className = 'prop-inner-anim anim-cat-twitch';
+        if (innerB) innerB.innerHTML = '';
+      } else if (lens === 'sparkles') {
+        innerA.innerHTML = SNAP_SVGS.sparkles;
+        innerA.className = 'prop-inner-anim anim-sparkle';
+        if (innerB) innerB.innerHTML = '';
+      }
+    }
+
+    document.querySelectorAll('.lens-bubble').forEach(b => {
+      b.addEventListener('click', () => activateLens(b.dataset.lens));
+    });
+
+    // -------------------------------------------------------------
+    // MULTI-FACE 3D LENS RENDERING (FACE 1 & FACE 2)
+    // -------------------------------------------------------------
+    function renderAllLenses(predictions) {
+      if (predictions.length > 0) {
+        renderSingleFace(predictions[0], 0, propSlotA, propInnerA, propSlotB, propInnerB, propSlotC, propInnerC, blushL, blushR);
+      }
+      if (predictions.length > 1) {
+        renderSingleFace(predictions[1], 1, propSlotA2, propInnerA2, propSlotB2, propInnerB2, propSlotC2, propInnerC2, blushL2, blushR2);
+      } else {
+        [propSlotA2, propSlotB2, propSlotC2, blushL2, blushR2].forEach(s => {
+          if (s) s.style.display = 'none';
+        });
+      }
+    }
+
+    function renderSingleFace(pred, faceIdx, slotA, innerA, slotB, innerB, slotC, innerC, bL, bR) {
+      if (!pred || !pred.landmarks || currentLens === 'none') return;
+
+      const rawR = getCoverCoords(pred.landmarks[0][0], pred.landmarks[0][1], localSlot);
+      const rawL = getCoverCoords(pred.landmarks[1][0], pred.landmarks[1][1], localSlot);
+      const rawNose = getCoverCoords(pred.landmarks[2][0], pred.landmarks[2][1], localSlot);
+      const rawMouth = getCoverCoords(pred.landmarks[3][0], pred.landmarks[3][1], localSlot);
+
+      if (!smoothedFaces[faceIdx]) {
+        smoothedFaces[faceIdx] = {
+          sR: { x: rawR.x, y: rawR.y },
+          sL: { x: rawL.x, y: rawL.y },
+          sNose: { x: rawNose.x, y: rawNose.y },
+          sMouth: { x: rawMouth.x, y: rawMouth.y }
+        };
+      } else {
+        const cache = smoothedFaces[faceIdx];
+        cache.sR.x += (rawR.x - cache.sR.x) * SMOOTH_ALPHA;
+        cache.sR.y += (rawR.y - cache.sR.y) * SMOOTH_ALPHA;
+        cache.sL.x += (rawL.x - cache.sL.x) * SMOOTH_ALPHA;
+        cache.sL.y += (rawL.y - cache.sL.y) * SMOOTH_ALPHA;
+        cache.sNose.x += (rawNose.x - cache.sNose.x) * SMOOTH_ALPHA;
+        cache.sNose.y += (rawNose.y - cache.sNose.y) * SMOOTH_ALPHA;
+        cache.sMouth.x += (rawMouth.x - cache.sMouth.x) * SMOOTH_ALPHA;
+        cache.sMouth.y += (rawMouth.y - cache.sMouth.y) * SMOOTH_ALPHA;
+      }
+
+      const s = smoothedFaces[faceIdx];
+      const eyeLeftScreen = (s.sR.x < s.sL.x) ? s.sR : s.sL;
+      const eyeRightScreen = (s.sR.x < s.sL.x) ? s.sL : s.sR;
+
+      const dx = eyeRightScreen.x - eyeLeftScreen.x;
+      const dy = eyeRightScreen.y - eyeLeftScreen.y;
+      const eyeDist = Math.max(20, Math.hypot(dx, dy));
+
+      const ux = dx / eyeDist;
+      const uy = dy / eyeDist;
+      const upX = uy;
+      const upY = -ux;
+      const downX = -uy;
+      const downY = ux;
+
+      const rollAngle = (Math.atan2(dy, dx) * 180) / Math.PI;
+      const eyeMidX = (eyeLeftScreen.x + eyeRightScreen.x) / 2;
+      const eyeMidY = (eyeLeftScreen.y + eyeRightScreen.y) / 2;
+
+      let faceScale = 1.0;
+      if (calibratedMetrics && calibratedMetrics.shape) {
+        if (calibratedMetrics.shape.includes("Round")) faceScale = 1.08;
+        else if (calibratedMetrics.shape.includes("Oblong")) faceScale = 0.95;
+        else if (calibratedMetrics.shape.includes("Heart")) faceScale = 1.04;
+      }
+      const totalScale = faceScale * manualScale;
+      const shiftX = (downX * manualYOffset);
+      const shiftY = (downY * manualYOffset);
+
+      function setSlotStyle(slot, x, y, w, h, roll) {
+        if (!slot) return;
+        slot.style.display = 'block';
+        slot.style.left = `${x + shiftX}px`;
+        slot.style.top = `${y + shiftY}px`;
+        slot.style.width = `${w}px`;
+        slot.style.height = `${h}px`;
+        slot.style.transform = `translate(-50%, -50%) rotate(${roll}deg)`;
+      }
+
+      // Rosy Cheeks Blush
+      if (bL && bR) {
+        if (['puppy', 'kitty', 'hearts', 'bunny', 'princess', 'flowers', 'butterfly'].includes(currentLens)) {
+          bL.style.display = 'block';
+          bR.style.display = 'block';
+          const blushSize = eyeDist * 0.72;
+          const cheekDist = eyeDist * 0.44;
+          const cheekLX = eyeLeftScreen.x + (downX * cheekDist) + shiftX;
+          const cheekLY = eyeLeftScreen.y + (downY * cheekDist) + shiftY;
+          const cheekRX = eyeRightScreen.x + (downX * cheekDist) + shiftX;
+          const cheekRY = eyeRightScreen.y + (downY * cheekDist) + shiftY;
+
+          bL.style.left = `${cheekLX}px`;
+          bL.style.top = `${cheekLY}px`;
+          bL.style.width = `${blushSize}px`;
+          bL.style.height = `${blushSize * 0.75}px`;
+          bL.style.transform = `translate(-50%, -50%) rotate(${rollAngle}deg)`;
+
+          bR.style.left = `${cheekRX}px`;
+          bR.style.top = `${cheekRY}px`;
+          bR.style.width = `${blushSize}px`;
+          bR.style.height = `${blushSize * 0.75}px`;
+          bR.style.transform = `translate(-50%, -50%) rotate(${rollAngle}deg)`;
+        } else {
+          bL.style.display = 'none';
+          bR.style.display = 'none';
+        }
+      }
+
+      // Mouth-open surprise
+      const mouthDist = Math.hypot(s.sMouth.x - s.sNose.x, s.sMouth.y - s.sNose.y);
+      const isMouthOpen = eyeDist > 0 && (mouthDist / eyeDist > 0.54);
+
+      if (faceIdx === 0) {
+        if (isMouthOpen) {
+          if (!wasMouthOpenPreviously) {
+            playSurpriseChime();
+            wasMouthOpenPreviously = true;
+            if (openMouthTip) openMouthTip.textContent = '✨ WOW! 🎉';
+          }
+        } else {
+          wasMouthOpenPreviously = false;
+          if (openMouthTip && ['puppy', 'thug', 'hearts', 'devil'].includes(currentLens)) {
+            openMouthTip.textContent = '😮 Open mouth for surprise!';
+          }
+        }
+      }
+
+      // Mathematically anchor props by lens type
+      if (currentLens === 'puppy') {
+        const earW = eyeDist * 2.8 * totalScale;
+        const earH = earW * (120 / 260);
+        setSlotStyle(slotA, eyeMidX + (upX * eyeDist * 1.05), eyeMidY + (upY * eyeDist * 1.05), earW, earH, rollAngle);
+
+        const noseW = eyeDist * 1.05 * totalScale;
+        const noseH = noseW * (120 / 140);
+        setSlotStyle(slotB, s.sNose.x, s.sNose.y + (downY * 8), noseW, noseH, rollAngle);
+
+        if (isMouthOpen && slotC) {
+          innerC.innerHTML = SNAP_SVGS.dogTongue;
+          innerC.className = 'prop-inner-anim anim-bunny-bounce';
+          const tW = eyeDist * 1.15 * totalScale;
+          const tH = tW * (130 / 100);
+          setSlotStyle(slotC, s.sMouth.x + (downX * 18), s.sMouth.y + (downY * 18), tW, tH, rollAngle);
+        } else if (slotC) slotC.style.display = 'none';
+
+      } else if (currentLens === 'butterfly') {
+        const bW = eyeDist * 2.5 * totalScale;
+        const bH = bW * (110 / 240);
+        setSlotStyle(slotA, eyeMidX + (upX * eyeDist * 1.15), eyeMidY + (upY * eyeDist * 1.15), bW, bH, rollAngle);
+        if (slotB) slotB.style.display = 'none';
+        if (slotC) slotC.style.display = 'none';
+
+      } else if (currentLens === 'devil') {
+        const dW = eyeDist * 2.2 * totalScale;
+        const dH = dW * (110 / 200);
+        setSlotStyle(slotA, eyeMidX + (upX * eyeDist * 1.25), eyeMidY + (upY * eyeDist * 1.25), dW, dH, rollAngle);
+        if (slotB) slotB.style.display = 'none';
+
+        if (isMouthOpen && slotC) {
+          innerC.innerHTML = SNAP_SVGS.heartBurst;
+          innerC.className = 'prop-inner-anim anim-flame';
+          const hbW = eyeDist * 1.5 * totalScale;
+          setSlotStyle(slotC, s.sMouth.x - (downX * 12), s.sMouth.y - (downY * 12), hbW, hbW, rollAngle);
+        } else if (slotC) slotC.style.display = 'none';
+
+      } else if (currentLens === 'flowers') {
+        const fW = eyeDist * 2.4 * totalScale;
+        const fH = fW * (90 / 260);
+        setSlotStyle(slotA, eyeMidX + (upX * eyeDist * 1.1), eyeMidY + (upY * eyeDist * 1.1), fW, fH, rollAngle);
+        if (slotB) slotB.style.display = 'none';
+        if (slotC) slotC.style.display = 'none';
+
+      } else if (currentLens === 'thug') {
+        const glassW = eyeDist * 2.3 * totalScale;
+        const glassH = glassW * (80 / 220);
+        setSlotStyle(slotA, eyeMidX, eyeMidY, glassW, glassH, rollAngle);
+
+        const mustW = eyeDist * 1.45 * totalScale;
+        const mustH = mustW * (50 / 160);
+        const philX = s.sNose.x + (downX * eyeDist * 0.28);
+        const philY = s.sNose.y + (downY * eyeDist * 0.28);
+        setSlotStyle(slotB, philX, philY, mustW, mustH, rollAngle);
+
+        if (isMouthOpen && slotC) {
+          innerC.innerHTML = SNAP_SVGS.goldChain;
+          innerC.className = 'prop-inner-anim';
+          const chainW = eyeDist * 2.2 * totalScale;
+          const chainH = chainW * (110 / 200);
+          setSlotStyle(slotC, s.sMouth.x + (downX * eyeDist * 0.75), s.sMouth.y + (downY * eyeDist * 0.75), chainW, chainH, rollAngle);
+        } else if (slotC) slotC.style.display = 'none';
+
+      } else if (currentLens === 'cyber') {
+        const vW = eyeDist * 2.35 * totalScale;
+        const vH = vW * (75 / 230);
+        setSlotStyle(slotA, eyeMidX, eyeMidY, vW, vH, rollAngle);
+        if (slotB) slotB.style.display = 'none';
+        if (slotC) slotC.style.display = 'none';
+
+      } else if (currentLens === 'kitty') {
+        const earW = eyeDist * 2.4 * totalScale;
+        const earH = earW * (110 / 240);
+        setSlotStyle(slotA, eyeMidX + (upX * eyeDist * 1.15), eyeMidY + (upY * eyeDist * 1.15), earW, earH, rollAngle);
+
+        const faceW = eyeDist * 2.1 * totalScale;
+        const faceH = faceW * (90 / 200);
+        setSlotStyle(slotB, s.sNose.x, s.sNose.y, faceW, faceH, rollAngle);
+        if (slotC) slotC.style.display = 'none';
+
+      } else if (currentLens === 'hearts') {
+        const glassW = eyeDist * 2.35 * totalScale;
+        const glassH = glassW * (85 / 210);
+        setSlotStyle(slotA, eyeMidX, eyeMidY, glassW, glassH, rollAngle);
+
+        const spW = eyeDist * 2.1 * totalScale;
+        const spH = spW * (110 / 220);
+        setSlotStyle(slotB, eyeMidX + (upX * eyeDist * 0.35), eyeMidY + (upY * eyeDist * 0.35), spW, spH, rollAngle);
+
+        if (isMouthOpen && slotC) {
+          innerC.innerHTML = SNAP_SVGS.heartBurst;
+          innerC.className = 'prop-inner-anim anim-sparkle';
+          const hbW = eyeDist * 1.5 * totalScale;
+          setSlotStyle(slotC, s.sMouth.x - (downX * 12), s.sMouth.y - (downY * 12), hbW, hbW, rollAngle);
+        } else if (slotC) slotC.style.display = 'none';
+
+      } else if (currentLens === 'princess') {
+        const crownW = eyeDist * 1.85 * totalScale;
+        const crownH = crownW * (105 / 170);
+        setSlotStyle(slotA, eyeMidX + (upX * eyeDist * 1.25), eyeMidY + (upY * eyeDist * 1.25), crownW, crownH, rollAngle);
+
+        const spW = eyeDist * 2.0;
+        const spH = spW * (110 / 220);
+        setSlotStyle(slotB, eyeMidX, eyeMidY, spW, spH, rollAngle);
+        if (slotC) slotC.style.display = 'none';
+
+      } else if (currentLens === 'angel') {
+        const haloW = eyeDist * 2.1 * totalScale;
+        const haloH = haloW * (75 / 190);
+        setSlotStyle(slotA, eyeMidX + (upX * eyeDist * 1.65), eyeMidY + (upY * eyeDist * 1.65), haloW, haloH, rollAngle);
+        if (slotB) slotB.style.display = 'none';
+        if (slotC) slotC.style.display = 'none';
+
+      } else if (currentLens === 'bunny') {
+        const earW = eyeDist * 1.95 * totalScale;
+        const earH = earW * (150 / 170);
+        setSlotStyle(slotA, eyeMidX + (upX * eyeDist * 1.35), eyeMidY + (upY * eyeDist * 1.35), earW, earH, rollAngle);
+
+        const noseW = eyeDist * 0.95 * totalScale;
+        const noseH = noseW * (120 / 140);
+        setSlotStyle(slotB, s.sNose.x, s.sNose.y, noseW, noseH, rollAngle);
+        if (slotC) slotC.style.display = 'none';
+
+      } else if (currentLens === 'bow') {
+        const bowW = eyeDist * 1.45 * totalScale;
+        const bowH = bowW * (85 / 140);
+        const bowX = eyeMidX + (upX * eyeDist * 1.05) - (ux * eyeDist * 0.65);
+        const bowY = eyeMidY + (upY * eyeDist * 1.05) - (uy * eyeDist * 0.65);
+        setSlotStyle(slotA, bowX, bowY, bowW, bowH, rollAngle - 15);
+        if (slotB) slotB.style.display = 'none';
+        if (slotC) slotC.style.display = 'none';
+
+      } else if (currentLens === 'mustache') {
+        const mustW = eyeDist * 1.5 * totalScale;
+        const mustH = mustW * (50 / 160);
+        const philX = s.sNose.x + (downX * eyeDist * 0.28);
+        const philY = s.sNose.y + (downY * eyeDist * 0.28);
+        setSlotStyle(slotA, philX, philY, mustW, mustH, rollAngle);
+        if (slotB) slotB.style.display = 'none';
+        if (slotC) slotC.style.display = 'none';
+
+      } else if (currentLens === 'alien') {
+        const aW = eyeDist * 2.1 * totalScale;
+        const aH = aW * (110 / 200);
+        setSlotStyle(slotA, eyeMidX + (upX * eyeDist * 1.3), eyeMidY + (upY * eyeDist * 1.3), aW, aH, rollAngle);
+        if (slotB) slotB.style.display = 'none';
+        if (slotC) slotC.style.display = 'none';
+
+      } else if (currentLens === 'sparkles') {
+        const spW = eyeDist * 2.3 * totalScale;
+        const spH = spW * (110 / 220);
+        setSlotStyle(slotA, eyeMidX, eyeMidY, spW, spH, rollAngle);
+        if (slotB) slotB.style.display = 'none';
+        if (slotC) slotC.style.display = 'none';
+      }
+    }
+
+    // -------------------------------------------------------------
+    // FIT TUNER CONTROLS
+    // -------------------------------------------------------------
+    if (toggleTunerBtn) {
+      toggleTunerBtn.addEventListener('click', () => {
+        const isHidden = (fitTunerBar.style.display === 'none');
+        fitTunerBar.style.display = isHidden ? 'flex' : 'none';
+        toggleTunerBtn.style.background = isHidden ? '#fffc00' : '#1f273b';
+        toggleTunerBtn.style.color = isHidden ? '#000' : '#fffc00';
+      });
+    }
+
+    if (sizeRange) {
+      sizeRange.addEventListener('input', (e) => {
+        manualScale = parseFloat(e.target.value) / 100;
+        sizeValLabel.textContent = `${e.target.value}%`;
+      });
+    }
+
+    if (posRange) {
+      posRange.addEventListener('input', (e) => {
+        manualYOffset = parseInt(e.target.value, 10);
+        posValLabel.textContent = `${manualYOffset > 0 ? '+' : ''}${manualYOffset}px`;
+      });
+    }
+
+    if (resetTunerBtn) {
+      resetTunerBtn.addEventListener('click', () => {
+        manualScale = 1.0;
+        manualYOffset = 0;
+        sizeRange.value = 100;
+        posRange.value = 0;
+        sizeValLabel.textContent = '100%';
+        posValLabel.textContent = '0px';
+      });
+    }
+
+    // -------------------------------------------------------------
+    // TIMER MODE (3s / 5s / 10s / 0s Instant)
+    // -------------------------------------------------------------
+    if (timerModeBtn) {
+      timerModeBtn.addEventListener('click', () => {
+        timerIdx = (timerIdx + 1) % timerOptions.length;
+        timerSeconds = timerOptions[timerIdx];
+        timerModeBtn.textContent = (timerSeconds === 0) ? '⚡ Instant' : `⏱️ ${timerSeconds}s`;
+        if (navigator.vibrate) navigator.vibrate(20);
+      });
+    }
+
+    // -------------------------------------------------------------
+    // WEBRTC ONLINE FRIEND CONNECTION WITH OPEN RELAY TURN SERVERS
+    // -------------------------------------------------------------
+    function initPeer() {
+      if (typeof Peer === 'undefined') {
+        myRoomCodeEl.textContent = "Solo Only";
+        return;
+      }
+
+      myPeerId = 'booth-' + Math.floor(10000 + Math.random() * 90000);
+      peer = new Peer(myPeerId, {
+        config: {
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'turn:relay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+            { urls: 'turn:relay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+            { urls: 'turn:relay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
+          ]
+        }
+      });
+
+      peer.on('open', (id) => {
+        myPeerId = id;
+        myRoomCodeEl.textContent = id;
+        statusDot.className = 'status-dot';
+        duoStatusText.textContent = "Solo Booth (Ready for Friend)";
+
+        const params = new URLSearchParams(window.location.search);
+        const joinTarget = params.get('room');
+        if (joinTarget && joinTarget !== id) {
+          friendRoomInput.value = joinTarget;
+          connectToFriend(joinTarget);
+        }
+      });
+
+      peer.on('call', (call) => {
+        activeMediaCall = call;
+        call.answer(stream);
+        call.on('stream', (remoteStream) => {
+          setupRemoteStream(remoteStream);
+        });
+        call.on('close', () => {
+          setDuoMode(false);
+          statusDot.className = 'status-dot';
+          duoStatusText.textContent = "Friend Left Booth";
+        });
+      });
+
+      peer.on('connection', (conn) => {
+        setupDataConnection(conn);
+      });
+
+      peer.on('error', (err) => {
+        console.warn("PeerJS error:", err);
+        statusDot.className = 'status-dot';
+        duoStatusText.textContent = "Solo Booth (Ready)";
+      });
+    }
+
+    async function connectToFriend(friendId) {
+      if (!friendId) return;
+      if (!peer) {
+        alert("Connection initializing. Please try again in 2 seconds.");
+        return;
+      }
+      statusDot.className = 'status-dot connecting';
+      duoStatusText.textContent = `Connecting to ${friendId}...`;
+
+      if (!stream) await startCamera();
+
+      const call = peer.call(friendId, stream);
+      activeMediaCall = call;
+      call.on('stream', (remoteStream) => setupRemoteStream(remoteStream));
+      call.on('close', () => {
+        setDuoMode(false);
+        statusDot.className = 'status-dot';
+        duoStatusText.textContent = "Friend Left Booth";
+      });
+
+      const conn = peer.connect(friendId);
+      setupDataConnection(conn);
+    }
+
+    function setupDataConnection(conn) {
+      activeDataConn = conn;
+      conn.on('data', (data) => {
+        if (data && data.action === 'TRIGGER_SHOOT') {
+          runPhotoShoot(false);
+        }
+      });
+    }
+
+    function setupRemoteStream(remoteStream) {
+      remoteVideo.muted = true;
+      remoteVideo.srcObject = remoteStream;
+      remoteVideo.onloadedmetadata = () => {
+        remoteVideo.play().catch(e => console.log(e));
+      };
+      remoteVideo.play().catch(e => console.log(e));
+      setDuoMode(true);
+      statusDot.className = 'status-dot duo';
+      duoStatusText.textContent = "💖 Connected with Online Friend!";
+    }
+
+    function setDuoMode(enabled) {
+      isDuoMode = enabled;
+      if (enabled) {
+        videoStage.classList.add('duo-mode-active');
+        localSlot.classList.add('duo-slot');
+        remoteSlot.classList.add('duo-slot');
+        remoteSlot.style.display = 'block';
+      } else {
+        videoStage.classList.remove('duo-mode-active');
+        localSlot.classList.remove('duo-slot');
+        remoteSlot.classList.remove('duo-slot');
+        remoteSlot.style.display = 'none';
+      }
+    }
+
+    joinFriendBtn.addEventListener('click', () => {
+      const code = friendRoomInput.value.trim();
+      if (code) connectToFriend(code);
+    });
+
+    toggleDemoDuoBtn.addEventListener('click', () => {
+      isDemoDuo = !isDemoDuo;
+      if (isDemoDuo) {
+        remoteVideo.srcObject = stream;
+        remoteVideo.play().catch(() => { });
+        setDuoMode(true);
+        statusDot.className = 'status-dot duo';
+        duoStatusText.textContent = "🧪 Test Duo Mode (Split-Screen)";
+        toggleDemoDuoBtn.textContent = "❌ Exit Test";
+        toggleDemoDuoBtn.style.background = "#ff3b69";
+      } else {
+        setDuoMode(false);
+        statusDot.className = 'status-dot';
+        duoStatusText.textContent = "Solo Booth (Ready for Friend)";
+        toggleDemoDuoBtn.textContent = "🧪 Test Duo";
+        toggleDemoDuoBtn.style.background = "";
+      }
+    });
+
+    // -------------------------------------------------------------
+    // SHARE MODAL & INVITE SYSTEM
+    // -------------------------------------------------------------
+    const shareModalBackdrop = document.getElementById('shareModalBackdrop');
+    const openShareModalBtn = document.getElementById('openShareModalBtn');
+    const closeShareModalBtn = document.getElementById('closeShareModalBtn');
+    const copyShareLinkModalBtn = document.getElementById('copyShareLinkModalBtn');
+    const nativeShareBtn = document.getElementById('nativeShareBtn');
+    const shareLinkInput = document.getElementById('shareLinkInput');
+    const shareQrImg = document.getElementById('shareQrImg');
+    const shareToast = document.getElementById('shareToast');
+
+    function getShareableUrl() {
+      let base = (window.location.protocol === 'file:')
+        ? 'https://rssssssssssssssssssssss.github.io/photo-both-/'
+        : (window.location.origin + window.location.pathname);
+
+      if (myPeerId) {
+        return base + (base.includes('?') ? '&' : '?') + 'room=' + myPeerId;
+      }
+      return base;
+    }
+
+    function openShareModal() {
+      const shareUrl = getShareableUrl();
+      shareLinkInput.value = shareUrl;
+      shareQrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=8&data=${encodeURIComponent(shareUrl)}`;
+      shareToast.textContent = '';
+      shareModalBackdrop.style.display = 'flex';
+    }
+
+    function closeShareModal() {
+      shareModalBackdrop.style.display = 'none';
+    }
+
+    if (openShareModalBtn) openShareModalBtn.addEventListener('click', openShareModal);
+    if (copyInviteBtn) copyInviteBtn.addEventListener('click', openShareModal);
+    if (closeShareModalBtn) closeShareModalBtn.addEventListener('click', closeShareModal);
+
+    shareModalBackdrop.addEventListener('click', (e) => {
+      if (e.target === shareModalBackdrop) closeShareModal();
+    });
+
+    copyShareLinkModalBtn.addEventListener('click', () => {
+      const url = shareLinkInput.value;
+      navigator.clipboard.writeText(url).then(() => {
+        shareToast.textContent = "✅ Link copied to clipboard!";
+        copyShareLinkModalBtn.textContent = "✅ Copied!";
+        setTimeout(() => {
+          copyShareLinkModalBtn.textContent = "📋 Copy";
+          shareToast.textContent = "";
+        }, 2500);
+      }).catch(() => {
+        shareLinkInput.select();
+        document.execCommand('copy');
+        shareToast.textContent = "✅ Link copied!";
+      });
+    });
+
+    nativeShareBtn.addEventListener('click', async () => {
+      const url = shareLinkInput.value;
+      if (navigator.share) {
+        try {
+          await navigator.share({
+            title: '📸 Join my SnapBooth Photo Shoot!',
+            text: 'Hop on SnapBooth with me! It has AI face lenses and dual-cam merging. Join my room here:',
+            url: url
+          });
+        } catch (e) { }
+      } else {
+        navigator.clipboard.writeText(url).then(() => {
+          shareToast.textContent = "✅ Link copied! Paste into WhatsApp or messages.";
+        });
+      }
+    });
+
+    // -------------------------------------------------------------
+    // FILTERS & FRAMES
+    // -------------------------------------------------------------
+    filterButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        filterButtons.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        selectedFilter = btn.dataset.filter;
+        video.className = selectedFilter + (isMirrored ? '' : ' no-mirror');
+        if (remoteVideo) remoteVideo.className = selectedFilter + (isMirrored ? '' : ' no-mirror');
+        if (navigator.vibrate) navigator.vibrate(15);
+      });
+    });
+
+    modeStrip.addEventListener('click', () => {
+      currentMode = 'strip';
+      modeStrip.classList.add('active');
+      modeSingle.classList.remove('active');
+      if (capturedFrames.length > 0) renderOutput();
+    });
+
+    modeSingle.addEventListener('click', () => {
+      currentMode = 'single';
+      modeSingle.classList.add('active');
+      modeStrip.classList.remove('active');
+      if (capturedFrames.length > 0) renderOutput();
+    });
+
+    framePills.forEach(pill => {
+      pill.addEventListener('click', () => {
+        framePills.forEach(p => p.classList.remove('active'));
+        pill.classList.add('active');
+        frameColor = pill.dataset.color;
+        if (capturedFrames.length > 0) renderOutput();
+      });
+    });
+
+    // -------------------------------------------------------------
+    // PHOTO SHOOT & KEESPAKE STRIP RENDERER
+    // -------------------------------------------------------------
+    shutterBtn.addEventListener('click', () => {
+      ensureAudio();
+      if (navigator.vibrate) navigator.vibrate([40]);
+      if (activeDataConn && activeDataConn.open) {
+        activeDataConn.send({ action: 'TRIGGER_SHOOT' });
+      }
+      runPhotoShoot(true);
+    });
+
+    async function runPhotoShoot(isHostTrigger) {
+      if (isShooting) return;
+      isShooting = true;
+      shutterBtn.style.pointerEvents = 'none';
+      capturedFrames = [];
+
+      const totalPhotos = (currentMode === 'strip') ? 4 : 1;
+
+      for (let i = 0; i < totalPhotos; i++) {
+        if (timerSeconds > 0) {
+          await doCountdown(timerSeconds);
+        }
+        triggerFlash();
+        playShutterSound();
+        const frameData = grabMergedVideoFrame();
+        capturedFrames.push(frameData);
+        if (i < totalPhotos - 1) {
+          await new Promise(res => setTimeout(res, 750));
+        }
+      }
+
+      renderOutput();
+      isShooting = false;
+      shutterBtn.style.pointerEvents = 'all';
+    }
+
+    function doCountdown(seconds) {
+      return new Promise(resolve => {
+        countdownOverlay.style.display = 'flex';
+        let count = seconds;
+        countdownOverlay.textContent = count;
+        playBeep(750, 0.08);
+
+        const interval = setInterval(() => {
+          count--;
+          if (count > 0) {
+            countdownOverlay.textContent = count;
+            playBeep(750, 0.08);
+          } else {
+            clearInterval(interval);
+            countdownOverlay.style.display = 'none';
+            resolve();
+          }
+        }, 1000);
+      });
+    }
+
+    function triggerFlash() {
+      flashOverlay.classList.add('flash-active');
+      setTimeout(() => {
+        flashOverlay.classList.remove('flash-active');
+      }, 120);
+    }
+
+    function grabMergedVideoFrame() {
+      const tempCanvas = document.createElement('canvas');
+      const targetW = 1280;
+      const targetH = 720;
+      tempCanvas.width = targetW;
+      tempCanvas.height = targetH;
+      const ctx = tempCanvas.getContext('2d');
+
+      ctx.filter = getComputedStyle(video).filter;
+
+      if (!isDuoMode) {
+        // SOLO BOOTH
+        if (isMirrored) {
+          ctx.translate(targetW, 0);
+          ctx.scale(-1, 1);
+        }
+        ctx.drawImage(video, 0, 0, targetW, targetH);
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.filter = 'none';
+
+        if (currentLens !== 'none' && lastPredictions.length > 0) {
+          lastPredictions.slice(0, 2).forEach(pred => {
+            drawSnapLensOnCanvas(ctx, pred, 0, targetW, targetH);
+          });
+        }
+
+      } else {
+        // DUO MERGED BOOTH (Split Screen)
+        const halfW = targetW / 2;
+        const v1W = video.videoWidth || 1280;
+        const v1H = video.videoHeight || 720;
+        const cropW1 = (v1H * halfW) / targetH;
+        const cropX1 = Math.max(0, (v1W - cropW1) / 2);
+
+        // Left side (Local)
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, 0, halfW, targetH);
+        ctx.clip();
+        if (isMirrored) {
+          ctx.translate(halfW, 0);
+          ctx.scale(-1, 1);
+          ctx.drawImage(video, cropX1, 0, cropW1, v1H, 0, 0, halfW, targetH);
+        } else {
+          ctx.drawImage(video, cropX1, 0, cropW1, v1H, 0, 0, halfW, targetH);
+        }
+        ctx.restore();
+
+        // Right side (Friend)
+        const v2 = (remoteVideo && remoteVideo.srcObject && remoteVideo.readyState >= 2) ? remoteVideo : video;
+        const v2W = v2.videoWidth || 1280;
+        const v2H = v2.videoHeight || 720;
+        const cropW2 = (v2H * halfW) / targetH;
+        const cropX2 = Math.max(0, (v2W - cropW2) / 2);
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(halfW, 0, halfW, targetH);
+        ctx.clip();
+        if (isMirrored) {
+          ctx.translate(targetW, 0);
+          ctx.scale(-1, 1);
+          ctx.drawImage(v2, cropX2, 0, cropW2, v2H, 0, 0, halfW, targetH);
+        } else {
+          ctx.drawImage(v2, cropX2, 0, cropW2, v2H, halfW, 0, halfW, targetH);
+        }
+        ctx.restore();
+
+        // Neon divider
+        ctx.fillStyle = '#fffc00';
+        ctx.fillRect(halfW - 2, 0, 4, targetH);
+
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.filter = 'none';
+
+        if (currentLens !== 'none' && lastPredictions.length > 0) {
+          drawSnapLensOnCanvas(ctx, lastPredictions[0], 0, halfW, targetH);
+          if (isDemoDuo) {
+            drawSnapLensOnCanvas(ctx, lastPredictions[0], halfW, halfW, targetH);
+          }
+        }
+      }
+
+      // Draw Snapchat Caption Bar onto frame
+      const captionText = snapCaptionBar ? snapCaptionBar.innerText.trim() : '';
+      if (captionText && captionText !== 'Tap to add caption... ✍️') {
+        ctx.save();
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
+        const barH = 54;
+        const barY = targetH * 0.74;
+        ctx.fillRect(0, barY, targetW, barH);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 24px "Outfit", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(captionText, targetW / 2, barY + (barH / 2));
+        ctx.restore();
+      }
+
+      return tempCanvas;
+    }
+
+    function drawSnapLensOnCanvas(ctx, pred, regionX, regionW, regionH) {
+      if (!pred || !pred.landmarks) return;
+
+      const rEye = pred.landmarks[0];
+      const lEye = pred.landmarks[1];
+      const nose = pred.landmarks[2];
+      const mouth = pred.landmarks[3];
+
+      const vW = video.videoWidth || 1280;
+      const vH = video.videoHeight || 720;
+
+      function toCanv(vx, vy) {
+        let x = (vx / vW) * regionW;
+        let y = (vy / vH) * regionH;
+        if (isMirrored) x = regionW - x;
+        return { x: regionX + x, y: y };
+      }
+
+      const cR = toCanv(rEye[0], rEye[1]);
+      const cL = toCanv(lEye[0], lEye[1]);
+      const cNose = toCanv(nose[0], nose[1]);
+      const cMouth = toCanv(mouth[0], mouth[1]);
+
+      const eyeLeftScreen = (cR.x < cL.x) ? cR : cL;
+      const eyeRightScreen = (cR.x < cL.x) ? cL : cR;
+
+      const dx = eyeRightScreen.x - eyeLeftScreen.x;
+      const dy = eyeRightScreen.y - eyeLeftScreen.y;
+      const eyeDist = Math.max(20, Math.hypot(dx, dy));
+
+      const ux = dx / eyeDist;
+      const uy = dy / eyeDist;
+      const upX = uy;
+      const upY = -ux;
+      const downX = -uy;
+      const downY = ux;
+
+      const rollAngle = (Math.atan2(dy, dx) * 180) / Math.PI;
+      const eyeMidX = (eyeLeftScreen.x + eyeRightScreen.x) / 2;
+      const eyeMidY = (eyeLeftScreen.y + eyeRightScreen.y) / 2;
+
+      let faceScale = 1.0;
+      if (calibratedMetrics && calibratedMetrics.shape) {
+        if (calibratedMetrics.shape.includes("Round")) faceScale = 1.08;
+        else if (calibratedMetrics.shape.includes("Oblong")) faceScale = 0.95;
+        else if (calibratedMetrics.shape.includes("Heart")) faceScale = 1.04;
+      }
+      const totalScale = faceScale * manualScale;
+      const shiftX = downX * manualYOffset;
+      const shiftY = downY * manualYOffset;
+
+      // Draw cute blush on canvas
+      if (['puppy', 'kitty', 'hearts', 'bunny', 'princess', 'flowers', 'butterfly'].includes(currentLens)) {
+        const blushR = eyeDist * 0.34;
+        const cheekDist = eyeDist * 0.44;
+        const cheekLX = eyeLeftScreen.x + (downX * cheekDist) + shiftX;
+        const cheekLY = eyeLeftScreen.y + (downY * cheekDist) + shiftY;
+        const cheekRX = eyeRightScreen.x + (downX * cheekDist) + shiftX;
+        const cheekRY = eyeRightScreen.y + (downY * cheekDist) + shiftY;
+
+        ctx.save();
+        ctx.fillStyle = 'rgba(255, 64, 129, 0.42)';
+        ctx.beginPath(); ctx.arc(cheekLX, cheekLY, blushR, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cheekRX, cheekRY, blushR, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      }
+
+      function drawProp(imgKey, cx, cy, w, h, angle) {
+        const img = PRELOADED_SVGS[imgKey];
+        if (!img) return;
+        ctx.save();
+        ctx.translate(cx + shiftX, cy + shiftY);
+        ctx.rotate((angle * Math.PI) / 180);
+        ctx.drawImage(img, -w / 2, -h / 2, w, h);
+        ctx.restore();
+      }
+
+      const mouthDist = Math.hypot(cMouth.x - cNose.x, cMouth.y - cNose.y);
+      const isMouthOpen = eyeDist > 0 && (mouthDist / eyeDist > 0.54);
+
+      if (currentLens === 'puppy') {
+        const earW = eyeDist * 2.8 * totalScale;
+        const earH = earW * (120 / 260);
+        drawProp('dogEars', eyeMidX + (upX * eyeDist * 1.05), eyeMidY + (upY * eyeDist * 1.05), earW, earH, rollAngle);
+
+        const noseW = eyeDist * 1.05 * totalScale;
+        const noseH = noseW * (120 / 140);
+        drawProp('dogNose', cNose.x, cNose.y + (downY * 8), noseW, noseH, rollAngle);
+
+        if (isMouthOpen) {
+          const tW = eyeDist * 1.15 * totalScale;
+          const tH = tW * (130 / 100);
+          drawProp('dogTongue', cMouth.x + (downX * 18), cMouth.y + (downY * 18), tW, tH, rollAngle);
+        }
+
+      } else if (currentLens === 'butterfly') {
+        const bW = eyeDist * 2.5 * totalScale;
+        const bH = bW * (110 / 240);
+        drawProp('butterflyCrown', eyeMidX + (upX * eyeDist * 1.15), eyeMidY + (upY * eyeDist * 1.15), bW, bH, rollAngle);
+
+      } else if (currentLens === 'devil') {
+        const dW = eyeDist * 2.2 * totalScale;
+        const dH = dW * (110 / 200);
+        drawProp('devilHorns', eyeMidX + (upX * eyeDist * 1.25), eyeMidY + (upY * eyeDist * 1.25), dW, dH, rollAngle);
+
+        if (isMouthOpen) {
+          const hbW = eyeDist * 1.5 * totalScale;
+          drawProp('heartBurst', cMouth.x - (downX * 12), cMouth.y - (downY * 12), hbW, hbW, rollAngle);
+        }
+
+      } else if (currentLens === 'flowers') {
+        const fW = eyeDist * 2.4 * totalScale;
+        const fH = fW * (90 / 260);
+        drawProp('flowerCrown', eyeMidX + (upX * eyeDist * 1.1), eyeMidY + (upY * eyeDist * 1.1), fW, fH, rollAngle);
+
+      } else if (currentLens === 'thug') {
+        const glassW = eyeDist * 2.3 * totalScale;
+        const glassH = glassW * (80 / 220);
+        drawProp('thugGlasses', eyeMidX, eyeMidY, glassW, glassH, rollAngle);
+
+        const mustW = eyeDist * 1.45 * totalScale;
+        const mustH = mustW * (50 / 160);
+        const philX = cNose.x + (downX * eyeDist * 0.28);
+        const philY = cNose.y + (downY * eyeDist * 0.28);
+        drawProp('mustache', philX, philY, mustW, mustH, rollAngle);
+
+        if (isMouthOpen) {
+          const chainW = eyeDist * 2.2 * totalScale;
+          const chainH = chainW * (110 / 200);
+          drawProp('goldChain', cMouth.x + (downX * eyeDist * 0.75), cMouth.y + (downY * eyeDist * 0.75), chainW, chainH, rollAngle);
+        }
+
+      } else if (currentLens === 'cyber') {
+        const vW = eyeDist * 2.35 * totalScale;
+        const vH = vW * (75 / 230);
+        drawProp('cyberVisor', eyeMidX, eyeMidY, vW, vH, rollAngle);
+
+      } else if (currentLens === 'kitty') {
+        const earW = eyeDist * 2.4 * totalScale;
+        const earH = earW * (110 / 240);
+        drawProp('catEars', eyeMidX + (upX * eyeDist * 1.15), eyeMidY + (upY * eyeDist * 1.15), earW, earH, rollAngle);
+
+        const faceW = eyeDist * 2.1 * totalScale;
+        const faceH = faceW * (90 / 200);
+        drawProp('catFaceDetails', cNose.x, cNose.y, faceW, faceH, rollAngle);
+
+      } else if (currentLens === 'hearts') {
+        const glassW = eyeDist * 2.35 * totalScale;
+        const glassH = glassW * (85 / 210);
+        drawProp('heartGlasses', eyeMidX, eyeMidY, glassW, glassH, rollAngle);
+
+        const spW = eyeDist * 2.1 * totalScale;
+        const spH = spW * (110 / 220);
+        drawProp('sparkles', eyeMidX + (upX * eyeDist * 0.35), eyeMidY + (upY * eyeDist * 0.35), spW, spH, rollAngle);
+
+        if (isMouthOpen) {
+          const hbW = eyeDist * 1.5 * totalScale;
+          drawProp('heartBurst', cMouth.x - (downX * 12), cMouth.y - (downY * 12), hbW, hbW, rollAngle);
+        }
+
+      } else if (currentLens === 'princess') {
+        const crownW = eyeDist * 1.85 * totalScale;
+        const crownH = crownW * (105 / 170);
+        drawProp('crown', eyeMidX + (upX * eyeDist * 1.25), eyeMidY + (upY * eyeDist * 1.25), crownW, crownH, rollAngle);
+
+        const spW = eyeDist * 2.0;
+        const spH = spW * (110 / 220);
+        drawProp('sparkles', eyeMidX, eyeMidY, spW, spH, rollAngle);
+
+      } else if (currentLens === 'angel') {
+        const haloW = eyeDist * 2.1 * totalScale;
+        const haloH = haloW * (75 / 190);
+        drawProp('halo', eyeMidX + (upX * eyeDist * 1.65), eyeMidY + (upY * eyeDist * 1.65), haloW, haloH, rollAngle);
+
+      } else if (currentLens === 'bunny') {
+        const earW = eyeDist * 1.95 * totalScale;
+        const earH = earW * (150 / 170);
+        drawProp('bunnyEars', eyeMidX + (upX * eyeDist * 1.35), eyeMidY + (upY * eyeDist * 1.35), earW, earH, rollAngle);
+
+        const noseW = eyeDist * 0.95 * totalScale;
+        const noseH = noseW * (120 / 140);
+        drawProp('dogNose', cNose.x, cNose.y, noseW, noseH, rollAngle);
+
+      } else if (currentLens === 'bow') {
+        const bowW = eyeDist * 1.45 * totalScale;
+        const bowH = bowW * (85 / 140);
+        const bowX = eyeMidX + (upX * eyeDist * 1.05) - (ux * eyeDist * 0.65);
+        const bowY = eyeMidY + (upY * eyeDist * 1.05) - (uy * eyeDist * 0.65);
+        drawProp('bow', bowX, bowY, bowW, bowH, rollAngle - 15);
+
+      } else if (currentLens === 'mustache') {
+        const mustW = eyeDist * 1.5 * totalScale;
+        const mustH = mustW * (50 / 160);
+        const philX = cNose.x + (downX * eyeDist * 0.28);
+        const philY = cNose.y + (downY * eyeDist * 0.28);
+        drawProp('mustache', philX, philY, mustW, mustH, rollAngle);
+
+      } else if (currentLens === 'alien') {
+        const aW = eyeDist * 2.1 * totalScale;
+        const aH = aW * (110 / 200);
+        drawProp('alienAntenna', eyeMidX + (upX * eyeDist * 1.3), eyeMidY + (upY * eyeDist * 1.3), aW, aH, rollAngle);
+
+      } else if (currentLens === 'sparkles') {
+        const spW = eyeDist * 2.3 * totalScale;
+        const spH = spW * (110 / 220);
+        drawProp('sparkles', eyeMidX, eyeMidY, spW, spH, rollAngle);
+      }
+    }
+
+    function renderOutput() {
+      if (capturedFrames.length === 0) return;
+
+      const ctx = stripCanvas.getContext('2d');
+      const photoW = 600;
+      const photoH = 450;
+      const margin = 28;
+      const bottomSpace = 90;
+
+      if (currentMode === 'strip') {
+        const totalW = photoW + (margin * 2);
+        const totalH = (photoH * 4) + (margin * 5) + bottomSpace;
+
+        stripCanvas.width = totalW;
+        stripCanvas.height = totalH;
+
+        ctx.fillStyle = frameColor;
+        ctx.fillRect(0, 0, totalW, totalH);
+
+        capturedFrames.forEach((frame, idx) => {
+          const y = margin + (idx * (photoH + margin));
+          ctx.drawImage(frame, margin, y, photoW, photoH);
+        });
+
+        ctx.fillStyle = (frameColor === '#121212') ? '#ffffff' : '#1f2430';
+        ctx.font = 'bold 22px "Space Mono", monospace';
+        ctx.textAlign = 'center';
+        const brandText = isDuoMode ? "✨ SNAPBOOTH • BFF EDITION ✨" : "✨ SNAPBOOTH ✨";
+        ctx.fillText(brandText, totalW / 2, totalH - 55);
+
+        ctx.font = '14px "Outfit", sans-serif';
+        const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        ctx.fillText(dateStr.toUpperCase(), totalW / 2, totalH - 32);
+
+      } else {
+        const totalW = photoW + (margin * 2);
+        const totalH = photoH + margin + bottomSpace;
+
+        stripCanvas.width = totalW;
+        stripCanvas.height = totalH;
+
+        ctx.fillStyle = frameColor;
+        ctx.fillRect(0, 0, totalW, totalH);
+        ctx.drawImage(capturedFrames[0], margin, margin, photoW, photoH);
+
+        ctx.fillStyle = (frameColor === '#121212') ? '#ffffff' : '#1f2430';
+        ctx.font = 'italic 24px "Playfair Display", serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(isDuoMode ? "Together Forever" : "Special Moments", totalW / 2, totalH - 45);
+
+        ctx.font = '13px "Space Mono", monospace';
+        ctx.fillText(new Date().toLocaleDateString(), totalW / 2, totalH - 22);
+      }
+
+      emptyState.style.display = 'none';
+      stripCanvas.style.display = 'block';
+      downloadBtn.disabled = false;
+      printBtn.disabled = false;
+    }
+
+    // Reliable blob download for mobile & desktop
+    downloadBtn.addEventListener('click', () => {
+      stripCanvas.toBlob((blob) => {
+        if (!blob) return;
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.download = `snapbooth-${isDuoMode ? 'duo-' : ''}${Date.now()}.png`;
+        link.href = url;
+        document.body.appendChild(link);
+        link.click();
+        setTimeout(() => {
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+        }, 1000);
+      }, 'image/png');
+    });
+
+    printBtn.addEventListener('click', () => {
+      const dataUrl = stripCanvas.toDataURL('image/png');
+      const win = window.open('');
+      win.document.write(`
+        <html>
+          <head><title>Print Photo Strip</title></head>
+          <body style="margin:0; display:flex; justify-content:center; align-items:center; background:#eee;">
+            <img src="${dataUrl}" style="max-height:95vh; box-shadow:0 0 10px rgba(0,0,0,0.3);" onload="window.print(); window.close();"/>
+          </body>
+        </html>
+      `);
+      win.document.close();
+    });
+  </script>
+</body>
+
+</html>
